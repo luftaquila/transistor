@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 display-info = "0.4.8"
+enigo = "0.1.3"
