@@ -7,6 +7,8 @@ fn main() {
         println!("display_info {display_info:?}");
     }
 
+    // let socket = UdpSocket::bind("127.0.0.1:15007");
+
     loop {
         if let Err(error) = listen(callback) {
             println!("Error: {:?}", error)
