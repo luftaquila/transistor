@@ -10,20 +10,23 @@ fn main() {
 
     let socket = UdpSocket::bind(("127.0.0.1", port)).expect("bind failed!");
 
-    println!("waiting for client...");
+    // println!("waiting for client...");
 
-    let mut buf: [u8; 5] = [0; 5];
-    let (nb, src) = socket.recv_from(&mut buf).expect("handshake failed!");
+    // let mut buf: [u8; 5] = [0; 5];
+    // let (nb, src) = socket.recv_from(&mut buf).expect("handshake failed!");
 
     println!("start monitoring..");
 
-    monitor(socket, src);
+    // monitor(socket, src);
+    monitor(socket);
 }
 
-fn monitor(socket: UdpSocket, src: SocketAddr) {
+fn monitor(socket: UdpSocket/*, src: SocketAddr*/) {
     // loop {
-        let res = listen(callback);
-        println!("res: {:?}", res);
+        let res = listen(move |event| {
+            println!("event: {:?}, socket: {:?}", event, socket);
+        });
+        // println!("res: {:?}", res);
         // if let Err(error) = listen(callback) {
         //     println!("Error: {:?}", error)
         // }
