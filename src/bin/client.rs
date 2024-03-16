@@ -1,6 +1,6 @@
-use std::net::UdpSocket;
 use display_info::DisplayInfo;
 use rdev::*;
+use std::net::UdpSocket;
 
 const server_ip: &str = "127.0.0.1";
 const port: u16 = 15007;
@@ -17,7 +17,6 @@ fn main() -> std::io::Result<()> {
 
     loop {
         // socket.recv_from
-
     }
 
     Ok(())
@@ -29,10 +28,7 @@ fn main() -> std::io::Result<()> {
     // }
 }
 
-fn config() {
-
-}
-
+fn config() {}
 
 // fn callback(event: Event) {
 //     match event.event_type {

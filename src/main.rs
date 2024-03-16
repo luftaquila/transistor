@@ -14,31 +14,29 @@ fn main() {
             println!("Error: {:?}", error)
         }
     }
-
 }
-
 
 fn callback(event: Event) {
     match event.event_type {
         EventType::KeyPress(key) => {
             println!("kepress: {:?}", event);
-        },
+        }
 
         EventType::KeyRelease(key) => {
             println!("keyrelease: {:?}", event);
-        },
+        }
 
         EventType::ButtonPress(button) => {
             println!("buttonpress: {:?}", event);
-        },
+        }
 
         EventType::ButtonRelease(button) => {
             println!("buttonrelease: {:?}", event);
-        },
+        }
 
         EventType::MouseMove { x, y } => {
             println!("mousemove: {:?}", event);
-        },
+        }
 
         EventType::Wheel { delta_x, delta_y } => {
             println!("wheel: {:?}", event);

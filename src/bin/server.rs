@@ -1,7 +1,7 @@
-use std::mem;
-use std::net::{UdpSocket, SocketAddr};
 use display_info::DisplayInfo;
 use rdev::*;
+use std::mem;
+use std::net::{SocketAddr, UdpSocket};
 
 const port: u16 = 15007;
 
@@ -21,16 +21,12 @@ fn main() {
     monitor(socket);
 }
 
-fn monitor(socket: UdpSocket/*, src: SocketAddr*/) {
-    // loop {
-        let res = listen(move |event| {
-            println!("event: {:?}, socket: {:?}", event, socket);
-        });
-        // println!("res: {:?}", res);
-        // if let Err(error) = listen(callback) {
-        //     println!("Error: {:?}", error)
-        // }
-    // }
+fn monitor(socket: UdpSocket /*, src: SocketAddr*/) {
+    if let Err(error) = listen(move |event| {
+        println!("event: {:?}, socket: {:?}", event, socket);
+    }) {
+        println!("input cature error: {:?}", error);
+    }
 }
 
 fn callback(event: Event) {
