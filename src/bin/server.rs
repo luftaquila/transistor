@@ -8,7 +8,7 @@ const PORT: u16 = 2426;
 fn main() {
     let _display = DisplayInfo::all().unwrap();
 
-    let listener = TcpListener::bind(("localhost", PORT))
+    let listener = TcpListener::bind(("0.0.0.0", PORT))
         .expect(&format!("[ERR] port {} bind failed!", PORT));
 
     for stream in listener.incoming() {
