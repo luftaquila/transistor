@@ -1,61 +1,83 @@
-use rdev::*;
 use std::env;
-use std::io::Read;
+use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
 
-fn main() {
+use display_info::DisplayInfo;
+use rdev::*;
+use transistor::serializable_displayinfo::SerializableDisplayInfo;
+
+fn main() -> Result<(), Error> {
+    /* parse server adddress from command line arguments */
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("[ERR]: no server address specified");
-        return;
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "[ERR] no server address specified",
+        ));
     }
 
-    let server = &args[1];
+    /* connect to server and transfer display info */
+    let stream = init(&args[1])?;
 
-    let mut stream = match TcpStream::connect(server) {
-        Ok(stream) => stream,
-        Err(e) => {
-            eprintln!("[ERR] server {} connection failed: {}", server, e);
-            return;
-        }
-    };
+    // listen
+
+    Ok(())
+}
+
+fn init(server: &str) -> Result<TcpStream, Error> {
+    let mut stream = TcpStream::connect(server)?;
 
     println!("[INF] server connected!");
 
-    let mut buffer = Vec::with_capacity(50);
-    let mut size = [0u8; 8];
+    /* transfer current display informations */
+    let displays: Vec<SerializableDisplayInfo> = DisplayInfo::all()
+        .unwrap()
+        .into_iter()
+        .map(SerializableDisplayInfo::from)
+        .collect();
 
-    loop {
-        match stream.read_exact(&mut size) {
-            Ok(_) => {},
-            Err(e) => {
-                eprintln!("[ERR] event size read failed: {}", e);
-                continue;
-            }
-        };
+    let encoded = bincode::serialize(&displays).unwrap();
 
-        let len = u64::from_be_bytes(size) as usize;
-        buffer.resize(len, 0);
+    stream.write_all(&encoded.len().to_be_bytes())?;
+    stream.write_all(&encoded)?;
 
-        match stream.read_exact(&mut buffer[..len]) {
-            Ok(_) => {
-                let event: Event = match bincode::deserialize(&buffer) {
-                    Ok(event) => event,
-                    Err(e) => {
-                        eprintln!("[ERR] event deserialization failed: {}", e);
-                        continue;
-                    }
-                };
-
-                println!("[EVT] <{}> {:?}", len, event);
-                buffer.clear();
-            }
-            Err(e) => {
-                eprintln!("[ERR] stream read failed: {}", e);
-                break;
-            }
-        }
-    }
+    Ok(stream)
 }
 
+// fn listen() {
+//     let mut buffer = Vec::with_capacity(50);
+//     let mut size = [0u8; 8];
+
+//     loop {
+//         match stream.read_exact(&mut size) {
+//             Ok(_) => {}
+//             Err(e) => {
+//                 eprintln!("[ERR] event size read failed: {}", e);
+//                 continue;
+//             }
+//         };
+
+//         let len = u64::from_be_bytes(size) as usize;
+//         buffer.resize(len, 0);
+
+//         match stream.read_exact(&mut buffer[..len]) {
+//             Ok(_) => {
+//                 let event: Event = match bincode::deserialize(&buffer) {
+//                     Ok(event) => event,
+//                     Err(e) => {
+//                         eprintln!("[ERR] event deserialization failed: {}", e);
+//                         continue;
+//                     }
+//                 };
+
+//                 println!("[EVT] <{}> {:?}", len, event);
+//                 buffer.clear();
+//             }
+//             Err(e) => {
+//                 eprintln!("[ERR] stream read failed: {}", e);
+//                 break;
+//             }
+//         }
+//     }
+// }
