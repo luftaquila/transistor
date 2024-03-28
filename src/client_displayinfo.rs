@@ -2,7 +2,7 @@ use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SerializableDisplayInfo {
+pub struct ClientDisplayInfo {
     pub name: String,
     pub id: u32,
     pub x: i32,
@@ -15,11 +15,12 @@ pub struct SerializableDisplayInfo {
     pub is_primary: bool,
 }
 
-impl From<DisplayInfo> for SerializableDisplayInfo {
+impl From<DisplayInfo> for ClientDisplayInfo {
     fn from(item: DisplayInfo) -> Self {
-        SerializableDisplayInfo {
+        ClientDisplayInfo {
             name: item.name,
             id: item.id,
+            // without raw_handle
             x: item.x,
             y: item.y,
             width: item.width,

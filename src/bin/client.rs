@@ -4,7 +4,7 @@ use std::net::TcpStream;
 
 use display_info::DisplayInfo;
 use rdev::*;
-use transistor::serializable_displayinfo::SerializableDisplayInfo;
+use transistor::client_displayinfo::ClientDisplayInfo;
 
 fn main() -> Result<(), Error> {
     /* parse server adddress from command line arguments */
@@ -15,6 +15,15 @@ fn main() -> Result<(), Error> {
             ErrorKind::InvalidInput,
             "[ERR] no server address specified",
         ));
+    }
+
+    println!("[INF] client startup! server: {}", &args[1]);
+
+    println!("[INF] detected system displays:");
+    let displays = DisplayInfo::all().unwrap();
+
+    for display in displays {
+        println!("  {:?}", display);
     }
 
     /* connect to server and transfer display info */
@@ -31,10 +40,10 @@ fn init(server: &str) -> Result<TcpStream, Error> {
     println!("[INF] server connected!");
 
     /* transfer current display informations */
-    let displays: Vec<SerializableDisplayInfo> = DisplayInfo::all()
+    let displays: Vec<ClientDisplayInfo> = DisplayInfo::all()
         .unwrap()
         .into_iter()
-        .map(SerializableDisplayInfo::from)
+        .map(ClientDisplayInfo::from)
         .collect();
 
     let encoded = bincode::serialize(&displays).unwrap();

@@ -1,1 +1,1 @@
-pub mod serializable_displayinfo;
+pub mod client_displayinfo;
