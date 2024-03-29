@@ -4,7 +4,7 @@ use std::net::TcpStream;
 
 use display_info::DisplayInfo;
 use rdev::*;
-use transistor::client_displayinfo::ClientDisplayInfo;
+use transistor::*;
 
 fn main() -> Result<(), Error> {
     /* parse server adddress from command line arguments */
@@ -19,14 +19,16 @@ fn main() -> Result<(), Error> {
 
     println!("[INF] client startup! server: {}", &args[1]);
 
-    println!("[INF] detected system displays:");
-    let displays = DisplayInfo::all().unwrap();
+    let client = Client::new()?;
 
-    for display in displays {
-        println!("  {:?}", display);
-    }
+    /* generate client.json */
+    let path = client.to_json()?;
+
+    println!("[INF] add generated client config to the server's config.json");
+    println!("client.json: {}", path.as_os_str().to_str().unwrap());
 
     /* connect to server and transfer display info */
+    // TODO: implement from here
     let stream = init(&args[1])?;
 
     // listen
