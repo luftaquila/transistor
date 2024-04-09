@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Write};
-use std::net::{SocketAddr, TcpListener};
+use std::io::{Error, ErrorKind, Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -10,6 +10,30 @@ use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/*********************************** utils ************************************/
+#[macro_export]
+macro_rules! config_dir {
+    () => {
+        ProjectDirs::from("io", "luftaquila", "transistor")
+            .unwrap()
+            .data_local_dir()
+    };
+}
+
+pub fn print_displays() {
+    println!("[INF] detected system displays:");
+    let displays = DisplayInfo::all().unwrap();
+
+    for display in displays {
+        println!("  {:?}", display);
+    }
+}
+
+fn empty_addr() -> SocketAddr {
+    "0.0.0.0:0000".parse().unwrap()
+}
+
+/***************************** ClientDisplayInfo ******************************/
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientDisplayInfo {
     pub name: String,
@@ -42,32 +66,12 @@ impl From<DisplayInfo> for ClientDisplayInfo {
     }
 }
 
-pub fn print_displays() {
-    println!("[INF] detected system displays:");
-    let displays = DisplayInfo::all().unwrap();
-
-    for display in displays {
-        println!("  {:?}", display);
-    }
-}
-
-#[macro_export]
-macro_rules! config_dir {
-    () => {
-        ProjectDirs::from("io", "luftaquila", "transistor")
-            .unwrap()
-            .data_local_dir()
-    };
-}
-
-fn empty_addr() -> SocketAddr {
-    "0.0.0.0:0000".parse().unwrap()
-}
-
+/********************************** Client ************************************/
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
     #[serde(default = "empty_addr")]
     ip: SocketAddr,
+    // TODO: add TcpStream
     displays: Vec<ClientDisplayInfo>,
     cid: Uuid,
 }
@@ -87,30 +91,27 @@ impl Client {
         // mkdir -p $path
         match fs::create_dir_all(config_dir!()) {
             Ok(()) => {}
-            Err(e) => {
-                return Err(Error::new(
-                    e.kind(),
-                    format!(
-                        "cannot access config dir {}: {}",
-                        config_dir!().as_os_str().to_str().unwrap(),
-                        e.to_string()
-                    ),
-                ));
-            }
+            Err(e) => return Err(e.into()),
         }
 
         // read predefined cid from cid.txt
         let config = config_dir!().join("cid.txt");
 
         if config.exists() {
-            let txt = fs::read_to_string(config)?;
+            let txt = match fs::read_to_string(config) {
+                Ok(txt) => txt,
+                Err(e) => return Err(e.into()),
+            };
+
             client.cid = Uuid::from_str(&txt).unwrap();
         } else {
             let path = config_dir!().join("cid.txt");
+
             let mut file = match File::create(&path) {
                 Ok(file) => file,
                 Err(e) => return Err(e.into()),
             };
+
             match file.write_all(client.cid.to_string().as_bytes()) {
                 Ok(()) => {}
                 Err(e) => return Err(e.into()),
@@ -121,16 +122,55 @@ impl Client {
     }
 
     pub fn to_json(&self) -> Result<PathBuf, Error> {
-        // TODO: error handlings
-        let json = serde_json::to_string_pretty(&self)?;
+        let json = match serde_json::to_string_pretty(&self) {
+            Ok(json) => json,
+            Err(e) => return Err(e.into()),
+        };
+
         let path = config_dir!().join("client.json");
-        let mut file = File::create(path.clone())?;
-        file.write_all(json.as_bytes())?;
+
+        let mut file = match File::create(path.clone()) {
+            Ok(file) => file,
+            Err(e) => return Err(e.into()),
+        };
+
+        match file.write_all(json.as_bytes()) {
+            Ok(file) => file,
+            Err(e) => return Err(e.into()),
+        };
 
         Ok(path)
     }
+
+    pub fn connect(&self, server: &str) -> Result<TcpStream, Error> {
+        let mut stream = match TcpStream::connect(server) {
+            Ok(stream) => stream,
+            Err(e) => return Err(e.into()),
+        };
+
+        let encoded = bincode::serialize(&self).unwrap();
+
+        match stream.write_all(&encoded.len().to_be_bytes()) {
+            Ok(()) => {}
+            Err(e) => return Err(e.into()),
+        };
+
+        match stream.write_all(&encoded) {
+            Ok(()) => {}
+            Err(e) => return Err(e.into()),
+        };
+
+        Ok(stream)
+    }
+
+    pub fn listen(&self, stream: &TcpStream) -> Result<(), Error> {
+        // TODO: implement from here
+
+        Ok(())
+    }
 }
 
+/********************************** Server ************************************/
 pub struct Server {
     tcp: TcpListener,
     clients: Vec<Client>,
@@ -139,30 +179,24 @@ pub struct Server {
 impl Server {
     pub fn new(port: u16) -> Result<Server, Error> {
         let server = Server {
-            tcp: TcpListener::bind(("0.0.0.0", port)).expect(&format!("port {} bind failed", port)),
+            tcp: match TcpListener::bind(("0.0.0.0", port)) {
+                Ok(tcp) => tcp,
+                Err(e) => return Err(e.into()),
+            },
             clients: Vec::new(),
         };
 
         // mkdir -p $path
         match fs::create_dir_all(config_dir!()) {
             Ok(()) => {}
-            Err(e) => {
-                return Err(Error::new(
-                    e.kind(),
-                    format!(
-                        "cannot access config dir {}: {}",
-                        config_dir!().as_os_str().to_str().unwrap(),
-                        e.to_string()
-                    ),
-                ));
-            }
+            Err(e) => return Err(e.into()),
         }
 
         Ok(server)
     }
 
-    pub fn init(&mut self) -> Result<(), Error> {
-        // read config.json
+    pub fn config(&mut self) -> Result<(), Error> {
+        /* read config.json */
         let config = config_dir!().join("config.json");
 
         if !config.exists() {
@@ -175,7 +209,10 @@ impl Server {
             ));
         }
 
-        let json = fs::read_to_string(config)?;
+        let json = match fs::read_to_string(config) {
+            Ok(json) => json,
+            Err(e) => return Err(e.into()),
+        };
 
         match serde_json::from_str(&json) {
             Ok(clients) => {
@@ -193,17 +230,103 @@ impl Server {
     }
 
     pub fn start(&mut self) -> Result<(), Error> {
-        println!("[INF] waiting for clients...");
+        println!(
+            "[INF] waiting for {} configured clients to be connected...",
+            self.clients.len()
+        );
+
+        let mut verified: Vec<bool> = vec![false; self.clients.len()];
 
         for stream in self.tcp.incoming() {
             match stream {
-                Ok(stream) => {
-                    println!("{:?}", stream.peer_addr());
-                    // TODO: validate client info with config.json
+                Ok(mut stream) => {
+                    /* receive client info */
+                    let mut size = [0u8; 8];
+                    match stream.read_exact(&mut size) {
+                        Ok(()) => {}
+                        Err(e) => return Err(e.into()),
+                    }
+
+                    let len = u64::from_be_bytes(size) as usize;
+                    let mut buffer = vec![0u8; len];
+                    match stream.read_exact(&mut buffer[..len]) {
+                        Ok(()) => {}
+                        Err(e) => return Err(e.into()),
+                    }
+
+                    /* deserialize transferred client info */
+                    let incoming_client: Client = match bincode::deserialize(&buffer)
+                        .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))
+                    {
+                        Ok(client) => client,
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    /* verify client */
+                    for (i, client) in self.clients.iter_mut().enumerate() {
+                        if client.cid == incoming_client.cid {
+                            verified[i] = true;
+                            client.ip = stream.peer_addr().unwrap();
+
+                            println!(
+                                "client {}({}) verified",
+                                incoming_client.cid,
+                                client.ip
+                            );
+                        }
+                    }
+
+                    /* check all clients verified */
+                    let mut ok = true;
+
+                    for i in 0..verified.len() {
+                        if verified[i] == false {
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    /* all configured clients connected and verified */
+                    if ok == true {
+                        break;
+                    }
                 }
-                Err(e) => eprintln!("[ERR] TCP connection failed: {}", e),
+                Err(e) => return Err(e.into()),
             }
         }
+
+        println!("[INF] all clients connected and verified!");
+
+        Ok(())
+    }
+
+    pub fn capture(&self) -> Result<(), Error> {
+        //     listen(move |event| {
+        //         println!("[EVT] {:?}", event);
+        //
+        //         /* TODO: find out which client to send event */
+        //
+        //         let encoded = bincode::serialize(&event).unwrap();
+        //         let size = encoded.len().to_be_bytes();
+        //
+        //         match stream.write_all(&encoded.len().to_be_bytes()) {
+        //             Ok(_) => (),
+        //             Err(e) => {
+        //                 eprintln!("[ERR] TCP stream write failed: {}", e);
+        //                 return;
+        //             }
+        //         }
+        //
+        //         match stream.write_all(&encoded) {
+        //             Ok(_) => (),
+        //             Err(e) => {
+        //                 eprintln!("[ERR] TCP stream write failed: {}", e);
+        //                 return;
+        //             }
+        //         }
+        //     })
+        //     .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))?;
+        //
 
         Ok(())
     }

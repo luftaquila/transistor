@@ -1,9 +1,5 @@
 use std::env;
-use std::io::{Error, ErrorKind, Read, Write};
-use std::net::TcpStream;
-
-use display_info::DisplayInfo;
-use rdev::*;
+use std::io::{Error, ErrorKind};
 use transistor::*;
 
 fn main() -> Result<(), Error> {
@@ -27,33 +23,12 @@ fn main() -> Result<(), Error> {
     println!("[INF] add generated client config to the server's config.json");
     println!("client.json: {}", path.as_os_str().to_str().unwrap());
 
-    /* connect to server and transfer display info */
-    // TODO: implement from here
-    let stream = init(&args[1])?;
+    /* connect to server and transfer client info */
+    let stream = client.connect(&args[1])?;
 
-    // listen
+    client.listen(&stream)?;
 
     Ok(())
-}
-
-fn init(server: &str) -> Result<TcpStream, Error> {
-    let mut stream = TcpStream::connect(server)?;
-
-    println!("[INF] server connected!");
-
-    /* transfer current display informations */
-    let displays: Vec<ClientDisplayInfo> = DisplayInfo::all()
-        .unwrap()
-        .into_iter()
-        .map(ClientDisplayInfo::from)
-        .collect();
-
-    let encoded = bincode::serialize(&displays).unwrap();
-
-    stream.write_all(&encoded.len().to_be_bytes())?;
-    stream.write_all(&encoded)?;
-
-    Ok(stream)
 }
 
 // fn listen() {
