@@ -15,7 +15,7 @@ fn main() -> Result<(), Error> {
 
     println!("[INF] client startup! server: {}", &args[1]);
 
-    let client = Client::new()?;
+    let mut client = Client::new()?;
 
     /* generate client.json */
     let path = client.to_json()?;
@@ -24,9 +24,9 @@ fn main() -> Result<(), Error> {
     println!("client.json: {}", path.as_os_str().to_str().unwrap());
 
     /* connect to server and transfer client info */
-    let stream = client.connect(&args[1])?;
+    client.connect(&args[1])?;
 
-    client.listen(&stream)?;
+    client.listen()?;
 
     Ok(())
 }

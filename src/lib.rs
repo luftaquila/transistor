@@ -29,10 +29,6 @@ pub fn print_displays() {
     }
 }
 
-fn empty_addr() -> SocketAddr {
-    "0.0.0.0:0000".parse().unwrap()
-}
-
 /***************************** ClientDisplayInfo ******************************/
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ClientDisplayInfo {
@@ -69,9 +65,10 @@ impl From<DisplayInfo> for ClientDisplayInfo {
 /********************************** Client ************************************/
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
-    #[serde(default = "empty_addr")]
-    ip: SocketAddr,
-    // TODO: add TcpStream
+    #[serde(skip)]
+    ip: Option<SocketAddr>,
+    #[serde(skip)]
+    tcp: Option<TcpStream>,
     displays: Vec<ClientDisplayInfo>,
     cid: Uuid,
 }
@@ -79,7 +76,8 @@ pub struct Client {
 impl Client {
     pub fn new() -> Result<Client, Error> {
         let mut client = Client {
-            ip: empty_addr(),
+            ip: None,
+            tcp: None,
             displays: DisplayInfo::all()
                 .unwrap()
                 .into_iter()
@@ -142,28 +140,33 @@ impl Client {
         Ok(path)
     }
 
-    pub fn connect(&self, server: &str) -> Result<TcpStream, Error> {
-        let mut stream = match TcpStream::connect(server) {
-            Ok(stream) => stream,
+    pub fn connect(&mut self, server: &str) -> Result<(), Error> {
+        self.tcp = match TcpStream::connect(server) {
+            Ok(stream) => Some(stream),
             Err(e) => return Err(e.into()),
         };
 
         let encoded = bincode::serialize(&self).unwrap();
 
-        match stream.write_all(&encoded.len().to_be_bytes()) {
+        match self
+            .tcp
+            .as_ref()
+            .unwrap()
+            .write_all(&encoded.len().to_be_bytes())
+        {
             Ok(()) => {}
             Err(e) => return Err(e.into()),
         };
 
-        match stream.write_all(&encoded) {
+        match self.tcp.as_ref().unwrap().write_all(&encoded) {
             Ok(()) => {}
             Err(e) => return Err(e.into()),
         };
 
-        Ok(stream)
+        Ok(())
     }
 
-    pub fn listen(&self, stream: &TcpStream) -> Result<(), Error> {
+    pub fn listen(&self) -> Result<(), Error> {
         // TODO: implement from here
 
         Ok(())
@@ -266,12 +269,12 @@ impl Server {
                     for (i, client) in self.clients.iter_mut().enumerate() {
                         if client.cid == incoming_client.cid {
                             verified[i] = true;
-                            client.ip = stream.peer_addr().unwrap();
+                            client.ip = Some(stream.peer_addr().unwrap());
 
                             println!(
                                 "client {}({}) verified",
                                 incoming_client.cid,
-                                client.ip
+                                client.ip.unwrap()
                             );
                         }
                     }
