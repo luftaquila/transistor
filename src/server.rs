@@ -2,12 +2,14 @@ use std::fs;
 use std::io::{Error, ErrorKind, Read};
 use std::net::TcpListener;
 
-use crate::client::Client;
+use crate::client::*;
+use crate::display::*;
 use crate::utils::config_dir;
 
 pub struct Server {
     tcp: TcpListener,
     clients: Vec<Client>,
+    displays: Vec<Display>,
 }
 
 impl Server {
@@ -18,6 +20,7 @@ impl Server {
                 Err(e) => return Err(e.into()),
             },
             clients: Vec::new(),
+            displays: Vec::new(),
         };
 
         // mkdir -p $path
@@ -43,7 +46,7 @@ impl Server {
             ));
         }
 
-        let json = match fs::read_to_string(config) {
+        let json = match fs::read_to_string(&config) {
             Ok(json) => json,
             Err(e) => return Err(e.into()),
         };
@@ -60,7 +63,27 @@ impl Server {
             }
         }
 
+        /* analyze warpzones */
+        if !self.analyze() {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "display configuration is not valid. config.json: {}",
+                    config.as_os_str().to_str().unwrap()
+                ),
+            ));
+        }
+
         Ok(())
+    }
+
+    fn analyze(&self) -> bool {
+        // TODO
+
+        /* analyze warpzones for the system displays first */
+        for (i, display) in self.displays.iter().enumerate() {}
+
+        true
     }
 
     pub fn start(&mut self) -> Result<(), Error> {
@@ -99,6 +122,8 @@ impl Server {
                     /* verify client */
                     for (i, client) in self.clients.iter_mut().enumerate() {
                         if client.cid == incoming_client.cid {
+                            /* TODO: verify configured displays */
+
                             verified[i] = true;
                             client.ip = Some(stream.peer_addr().unwrap());
 

@@ -1,47 +1,18 @@
+use std::cell::RefCell;
 use std::fs;
 use std::fs::File;
 use std::io::{Error, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::display::*;
 use crate::utils::config_dir;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ClientDisplayInfo {
-    pub name: String,
-    pub id: u32,
-    pub x: i32,
-    pub y: i32,
-    pub width: u32,
-    pub height: u32,
-    pub rotation: f32,
-    pub scale_factor: f32,
-    pub frequency: f32,
-    pub is_primary: bool,
-}
-
-impl From<DisplayInfo> for ClientDisplayInfo {
-    fn from(item: DisplayInfo) -> Self {
-        ClientDisplayInfo {
-            name: item.name,
-            id: item.id,
-            // without raw_handle
-            x: item.x,
-            y: item.y,
-            width: item.width,
-            height: item.height,
-            rotation: item.rotation,
-            scale_factor: item.scale_factor,
-            frequency: item.frequency,
-            is_primary: item.is_primary,
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
@@ -49,73 +20,43 @@ pub struct Client {
     pub ip: Option<SocketAddr>,
     #[serde(skip)]
     tcp: Option<TcpStream>,
-    displays: Vec<ClientDisplayInfo>,
+    #[serde(skip)]
+    pub displays: Vec<Rc<RefCell<Display>>>,
+    pub disp_serial: Vec<Display>,
     pub cid: Uuid,
 }
 
 impl Client {
-    pub fn new() -> Result<Client, Error> {
-        let mut client = Client {
+    pub fn new() -> Result<Rc<RefCell<Self>>, Error> {
+        let client = Rc::new(RefCell::new(Client {
             ip: None,
             tcp: None,
-            displays: DisplayInfo::all()
+            displays: Vec::new(),
+            disp_serial: DisplayInfo::all()
                 .unwrap()
                 .into_iter()
-                .map(ClientDisplayInfo::from)
+                .map(Display::from)
                 .collect(),
             cid: Uuid::new_v4(),
-        };
+        }));
 
-        // mkdir -p $path
-        match fs::create_dir_all(config_dir()) {
-            Ok(()) => {}
-            Err(e) => return Err(e.into()),
+        // set displays
+        client.borrow_mut().displays = DisplayInfo::all()
+            .unwrap()
+            .into_iter()
+            .map(|disp| Rc::new(RefCell::new(Display::from(disp))))
+            .collect::<Vec<Rc<RefCell<Display>>>>();
+
+        // set client reference for displays
+        for disp in client.borrow_mut().displays.iter_mut() {
+            disp.borrow_mut().owner = Some(Rc::downgrade(&client))
         }
 
-        // read predefined cid from cid.txt
-        let config = config_dir().join("cid.txt");
-
-        if config.exists() {
-            let txt = match fs::read_to_string(config) {
-                Ok(txt) => txt,
-                Err(e) => return Err(e.into()),
-            };
-
-            client.cid = Uuid::from_str(&txt).unwrap();
-        } else {
-            let mut file = match File::create(&config) {
-                Ok(file) => file,
-                Err(e) => return Err(e.into()),
-            };
-
-            match file.write_all(client.cid.to_string().as_bytes()) {
-                Ok(()) => {}
-                Err(e) => return Err(e.into()),
-            }
-        }
+        // set cid from cid.txt
+        let cid = client.borrow().get_cid().unwrap();
+        client.borrow_mut().cid = cid;
 
         Ok(client)
-    }
-
-    pub fn to_json(&self) -> Result<PathBuf, Error> {
-        let json = match serde_json::to_string_pretty(&self) {
-            Ok(json) => json,
-            Err(e) => return Err(e.into()),
-        };
-
-        let path = config_dir().join("client.json");
-
-        let mut file = match File::create(path.clone()) {
-            Ok(file) => file,
-            Err(e) => return Err(e.into()),
-        };
-
-        match file.write_all(json.as_bytes()) {
-            Ok(file) => file,
-            Err(e) => return Err(e.into()),
-        };
-
-        Ok(path)
     }
 
     pub fn connect(&mut self, server: &str) -> Result<(), Error> {
@@ -148,5 +89,47 @@ impl Client {
         // TODO: implement from here
 
         Ok(())
+    }
+
+    fn get_cid(&self) -> Result<Uuid, Error> {
+        let mut cid = Uuid::new_v4();
+
+        // mkdir -p $path
+        fs::create_dir_all(config_dir())?;
+
+        let cid_file = config_dir().join("cid.txt");
+
+        if cid_file.exists() {
+            // read predefined cid from cid.txt
+            let txt = fs::read_to_string(cid_file)?;
+            cid = Uuid::from_str(&txt).unwrap();
+        } else {
+            // create new cid.txt
+            let mut file = File::create(&cid_file)?;
+            file.write_all(self.cid.to_string().as_bytes())?;
+        }
+
+        Ok(cid)
+    }
+
+    pub fn to_json(&self) -> Result<PathBuf, Error> {
+        let json = match serde_json::to_string_pretty(&self) {
+            Ok(json) => json,
+            Err(e) => return Err(e.into()),
+        };
+
+        let path = config_dir().join("client.json");
+
+        let mut file = match File::create(path.clone()) {
+            Ok(file) => file,
+            Err(e) => return Err(e.into()),
+        };
+
+        match file.write_all(json.as_bytes()) {
+            Ok(file) => file,
+            Err(e) => return Err(e.into()),
+        };
+
+        Ok(path)
     }
 }

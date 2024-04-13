@@ -15,18 +15,18 @@ fn main() -> Result<(), Error> {
 
     println!("[INF] client startup! server: {}", &args[1]);
 
-    let mut client = Client::new()?;
+    let client = Client::new()?;
 
     /* generate client.json */
-    let path = client.to_json()?;
+    let path = client.borrow().to_json()?;
 
     println!("[INF] add generated client config to the server's config.json");
     println!("client.json: {}", path.as_os_str().to_str().unwrap());
 
     /* connect to server and transfer client info */
-    client.connect(&args[1])?;
+    client.borrow_mut().connect(&args[1])?;
 
-    client.listen()?;
+    client.borrow().listen()?;
 
     Ok(())
 }
