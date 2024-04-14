@@ -21,8 +21,8 @@ pub struct Client {
     #[serde(skip)]
     tcp: Option<TcpStream>,
     #[serde(skip)]
-    pub displays: Vec<Rc<RefCell<Display>>>,
-    pub disp_serial: Vec<Display>,
+    pub disp: Vec<Rc<RefCell<Display>>>,
+    pub displays: Vec<Display>,
     pub cid: Uuid,
 }
 
@@ -31,8 +31,8 @@ impl Client {
         let client = Rc::new(RefCell::new(Client {
             ip: None,
             tcp: None,
-            displays: Vec::new(),
-            disp_serial: DisplayInfo::all()
+            disp: Vec::new(),
+            displays: DisplayInfo::all()
                 .unwrap()
                 .into_iter()
                 .map(Display::from)
@@ -41,14 +41,14 @@ impl Client {
         }));
 
         // set displays
-        client.borrow_mut().displays = DisplayInfo::all()
+        client.borrow_mut().disp = DisplayInfo::all()
             .unwrap()
             .into_iter()
             .map(|disp| Rc::new(RefCell::new(Display::from(disp))))
             .collect::<Vec<Rc<RefCell<Display>>>>();
 
         // set client reference for displays
-        for disp in client.borrow_mut().displays.iter_mut() {
+        for disp in client.borrow_mut().disp.iter_mut() {
             disp.borrow_mut().owner = Some(Rc::downgrade(&client))
         }
 
