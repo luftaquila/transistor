@@ -1,6 +1,10 @@
+use std::cell::RefCell;
 use std::fs;
 use std::io::{Error, ErrorKind, Read};
 use std::net::TcpListener;
+use std::rc::Rc;
+
+use display_info::DisplayInfo;
 
 use crate::client::*;
 use crate::display::*;
@@ -8,8 +12,8 @@ use crate::utils::config_dir;
 
 pub struct Server {
     tcp: TcpListener,
-    clients: Vec<Client>,
-    displays: Vec<Display>,
+    clients: Vec<Rc<RefCell<Client>>>,
+    displays: Vec<Rc<RefCell<Display>>>,
 }
 
 impl Server {
@@ -51,9 +55,34 @@ impl Server {
             Err(e) => return Err(e.into()),
         };
 
+        /* deserialize config.json */
         match serde_json::from_str(&json) {
             Ok(clients) => {
-                self.clients = clients;
+                let clients: Vec<Client> = clients;
+
+                /* set clients */
+                self.clients = clients
+                    .into_iter()
+                    .map(|c| Rc::new(RefCell::new(c)))
+                    .collect();
+
+                self.clients.iter_mut().for_each(|c| {
+                    let mut c_ref = c.borrow_mut();
+
+                    /* set disp for local ref, from deserialized displays */
+                    c_ref.disp = c_ref
+                        .displays
+                        .clone()
+                        .into_iter()
+                        .map(|display| Rc::new(RefCell::new(display)))
+                        .collect();
+
+                    /* set owner and owner_type */
+                    c_ref.disp.iter_mut().for_each(|d| {
+                        d.borrow_mut().owner = Some(Rc::downgrade(c));
+                        d.borrow_mut().owner_type = DisplayOwnerType::CLIENT;
+                    });
+                });
             }
             Err(e) => {
                 return Err(Error::new(
@@ -64,12 +93,13 @@ impl Server {
         }
 
         /* analyze warpzones */
-        if !self.analyze() {
+        if let Err(e) = self.analyze() {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 format!(
-                    "display configuration is not valid. config.json: {}",
-                    config.as_os_str().to_str().unwrap()
+                    "{} is not valid: {}",
+                    config.as_os_str().to_str().unwrap(),
+                    e.to_string()
                 ),
             ));
         }
@@ -77,13 +107,105 @@ impl Server {
         Ok(())
     }
 
-    fn analyze(&self) -> bool {
-        // TODO
+    fn analyze(&mut self) -> Result<(), Error> {
+        /* set system displays */
+        let system_disp: Vec<Rc<RefCell<Display>>> = DisplayInfo::all()
+            .unwrap()
+            .into_iter()
+            .map(|disp| Rc::new(RefCell::new(Display::from(disp))))
+            .collect();
 
-        /* analyze warpzones for the system displays first */
-        for (i, display) in self.displays.iter().enumerate() {}
+        /* set client displays */
+        self.displays = self
+            .clients
+            .iter()
+            .flat_map(|c| c.borrow().disp.clone())
+            .collect();
 
-        true
+        /* analyze warpzones for system displays ←→ client displays */
+        for disp in system_disp.iter() {
+            let mut disp_ref = disp.borrow_mut();
+
+            disp_ref.owner = None;
+            disp_ref.owner_type = DisplayOwnerType::SERVER;
+
+            for target in self.displays.iter() {
+                /* check overlap */
+                if disp_ref.is_overlap(target) {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "two displays are overlapping.\ndisp_A: {:#?}, disp_B: {:#?}",
+                            disp_ref,
+                            target.borrow()
+                        ),
+                    ));
+                }
+
+                /* create warpzones if touching each other */
+                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
+                    disp_ref.warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction,
+                        to: Rc::downgrade(target),
+                    });
+
+                    target.borrow_mut().warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction: direction.reverse(),
+                        to: Rc::downgrade(disp),
+                    });
+                }
+            }
+        }
+
+        /* analyze warpzones for client displays ←→ client displays */
+        for disp in self.displays.iter() {
+            let mut disp_ref = disp.borrow_mut();
+
+            for target in self.displays.iter() {
+                /* skip if target is disp */
+                if Rc::ptr_eq(disp, target) {
+                    continue;
+                }
+
+                /* check overlap */
+                if disp_ref.is_overlap(target) {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "two displays are overlapping.\ndisp_A: {:#?}, disp_B: {:#?}",
+                            disp_ref,
+                            target.borrow()
+                        ),
+                    ));
+                }
+
+                /* create warpzones if touching each other */
+                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
+                    disp_ref.warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction,
+                        to: Rc::downgrade(target),
+                    });
+
+                    target.borrow_mut().warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction: direction.reverse(),
+                        to: Rc::downgrade(disp),
+                    });
+                }
+            }
+        }
+
+        /* merge all configured displays */
+        self.displays.extend(system_disp);
+
+        Ok(())
     }
 
     pub fn start(&mut self) -> Result<(), Error> {
@@ -121,16 +243,16 @@ impl Server {
 
                     /* verify client */
                     for (i, client) in self.clients.iter_mut().enumerate() {
-                        if client.cid == incoming_client.cid {
+                        if client.borrow().cid == incoming_client.cid {
                             /* TODO: verify configured displays */
 
                             verified[i] = true;
-                            client.ip = Some(stream.peer_addr().unwrap());
+                            client.borrow_mut().ip = Some(stream.peer_addr().unwrap());
 
                             println!(
                                 "client {}({}) verified",
                                 incoming_client.cid,
-                                client.ip.unwrap()
+                                client.borrow().ip.unwrap()
                             );
                         }
                     }
