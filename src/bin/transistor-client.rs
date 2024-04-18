@@ -28,6 +28,8 @@ fn main() -> Result<(), Error> {
 
     client.borrow().listen()?;
 
+    loop {}
+
     Ok(())
 }
 

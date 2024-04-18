@@ -5,6 +5,7 @@ use std::net::TcpListener;
 use std::rc::Rc;
 
 use display_info::DisplayInfo;
+use rdev::*;
 
 use crate::client::*;
 use crate::display::*;
@@ -14,6 +15,7 @@ pub struct Server {
     tcp: TcpListener,
     clients: Vec<Rc<RefCell<Client>>>,
     displays: Vec<Rc<RefCell<Display>>>,
+    current: Rc<RefCell<Option<Rc<RefCell<Display>>>>>,
 }
 
 impl Server {
@@ -25,6 +27,7 @@ impl Server {
             },
             clients: Vec::new(),
             displays: Vec::new(),
+            current: Rc::new(RefCell::new(None)),
         };
 
         // mkdir -p $path
@@ -364,33 +367,81 @@ impl Server {
         Ok(())
     }
 
-    pub fn capture(&self) -> Result<(), Error> {
-        //     listen(move |event| {
-        //         println!("[EVT] {:?}", event);
-        //
-        //         /* TODO: find out which client to send event */
-        //
-        //         let encoded = bincode::serialize(&event).unwrap();
-        //         let size = encoded.len().to_be_bytes();
-        //
-        //         match stream.write_all(&encoded.len().to_be_bytes()) {
-        //             Ok(_) => (),
-        //             Err(e) => {
-        //                 eprintln!("[ERR] TCP stream write failed: {}", e);
-        //                 return;
-        //             }
-        //         }
-        //
-        //         match stream.write_all(&encoded) {
-        //             Ok(_) => (),
-        //             Err(e) => {
-        //                 eprintln!("[ERR] TCP stream write failed: {}", e);
-        //                 return;
-        //             }
-        //         }
-        //     })
-        //     .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))?;
-        //
+    pub fn capture(self) -> Result<(), Error> {
+        let current = self.current.clone();
+
+        grab(move |event| -> Option<Event> {
+            /* if there is no current display */
+            if current.borrow().is_none() {
+                match event.event_type {
+                    EventType::MouseMove { x, y } => {
+                        /* identify current display if mouse moves */
+                        for disp in self.displays.iter() {
+                            let d = disp.borrow();
+
+                            /* skip client displays */
+                            if let DisplayOwnerType::CLIENT = d.owner_type {
+                                continue;
+                            }
+
+                            /* set current display */
+                            if x > d.x.into()
+                                && x < (d.x + d.width as i32).into()
+                                && y > d.y.into()
+                                && y < (d.y + d.height as i32).into()
+                            {
+                                // TODO: must be dropped before change current display
+                                *current.borrow_mut() = Some(disp.clone());
+                                break;
+                            }
+                        }
+                    }
+                    _ => {} // else, just ignore
+                }
+
+                return Some(event);
+            }
+
+            match event.event_type {
+                EventType::MouseMove { x, y } => {
+                    /* TODO: check if we are in warpzone */
+
+                }
+
+                EventType::KeyPress(key) => {}
+
+                EventType::KeyRelease(key) => {}
+
+                EventType::ButtonPress(button) => {}
+
+                EventType::ButtonRelease(button) => {}
+
+                EventType::Wheel { delta_x, delta_y } => {}
+            }
+
+            println!("[EVT] {:?}", event);
+
+            let encoded = bincode::serialize(&event).unwrap();
+            let size = encoded.len().to_be_bytes();
+
+            //     match stream.write_all(&encoded.len().to_be_bytes()) {
+            //         Ok(_) => (),
+            //         Err(e) => {
+            //             eprintln!("[ERR] TCP stream write failed: {}", e);
+            //             return;
+            //         }
+            //     }
+            //
+            //     match stream.write_all(&encoded) {
+            //         Ok(_) => (),
+            //         Err(e) => {
+            //             eprintln!("[ERR] TCP stream write failed: {}", e);
+            //             return;
+            //         }
+            //     }
+            Some(event)
+        })
+        .map_err(|e| Error::new(Other, format!("event capture error: {:?}", e)))?;
 
         Ok(())
     }
