@@ -162,12 +162,12 @@ impl Server {
         }
 
         /* analyze warpzones for client displays ←→ client displays */
-        for disp in self.displays.iter() {
+        for (i, disp) in self.displays.iter().enumerate() {
             let mut disp_ref = disp.borrow_mut();
 
-            for target in self.displays.iter() {
-                /* skip if target is disp */
-                if Rc::ptr_eq(disp, target) {
+            for (j, target) in self.displays.iter().enumerate() {
+                /* skip if the combination is already analyzed */
+                if i >= j {
                     continue;
                 }
 
@@ -176,7 +176,7 @@ impl Server {
                     return Err(Error::new(
                         ErrorKind::InvalidInput,
                         format!(
-                            "two displays are overlapping.\ndisp_A: {:#?}, disp_B: {:#?}",
+                            "two displays are overlapping.\ndisp_A: {:#?}\ndisp_B: {:#?}",
                             disp_ref,
                             target.borrow()
                         ),
@@ -200,7 +200,11 @@ impl Server {
                     });
                 }
             }
+
+            // TODO: check client display without warpzone
         }
+
+        println!("{:#?}", self.displays);
 
         /* merge all configured displays */
         self.displays.extend(system_disp);
@@ -243,16 +247,24 @@ impl Server {
 
                     /* verify client */
                     for (i, client) in self.clients.iter_mut().enumerate() {
-                        if client.borrow().cid == incoming_client.cid {
-                            /* TODO: verify configured displays */
+                        let mut client = client.borrow_mut();
 
+                        if client.cid == incoming_client.cid {
+                            /* verify configured displays */
+                            for disp in client.displays.iter() {
+                                for incoming_disp in incoming_client.displays.iter() {
+                                    // TODO: check configured displays are same
+                                }
+                            }
+
+                            client.tcp = Some(stream.try_clone().unwrap());
+                            client.ip = Some(stream.peer_addr().unwrap());
                             verified[i] = true;
-                            client.borrow_mut().ip = Some(stream.peer_addr().unwrap());
 
                             println!(
                                 "client {}({}) verified",
                                 incoming_client.cid,
-                                client.borrow().ip.unwrap()
+                                client.ip.unwrap()
                             );
                         }
                     }

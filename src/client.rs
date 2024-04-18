@@ -19,7 +19,7 @@ pub struct Client {
     #[serde(skip)]
     pub ip: Option<SocketAddr>,
     #[serde(skip)]
-    tcp: Option<TcpStream>,
+    pub tcp: Option<TcpStream>,
     #[serde(skip)]
     pub disp: Vec<Rc<RefCell<Display>>>,
     pub displays: Vec<Display>,
