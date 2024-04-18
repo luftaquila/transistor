@@ -7,6 +7,8 @@ const PORT: u16 = 2426;
 fn main() -> Result<(), Error> {
     println!("[INF] server startup!");
 
+    print_displays();
+
     let mut server = Server::new(PORT)?;
 
     /* read config.json */

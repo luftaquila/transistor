@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::fs;
-use std::io::{Error, ErrorKind, Read};
+use std::io::{Error, ErrorKind::*, Read};
 use std::net::TcpListener;
 use std::rc::Rc;
 
@@ -42,7 +42,7 @@ impl Server {
 
         if !config.exists() {
             return Err(Error::new(
-                ErrorKind::NotFound,
+                NotFound,
                 format!(
                     "no config.json found at {}",
                     config_dir().as_os_str().to_str().unwrap()
@@ -86,7 +86,7 @@ impl Server {
             }
             Err(e) => {
                 return Err(Error::new(
-                    ErrorKind::InvalidData,
+                    InvalidData,
                     format!("cannot parse config.json: {}", e.to_string()),
                 ));
             }
@@ -95,7 +95,7 @@ impl Server {
         /* analyze warpzones */
         if let Err(e) = self.analyze() {
             return Err(Error::new(
-                ErrorKind::InvalidData,
+                InvalidData,
                 format!(
                     "{} is not valid: {}",
                     config.as_os_str().to_str().unwrap(),
@@ -133,7 +133,7 @@ impl Server {
                 /* check overlap */
                 if disp_ref.is_overlap(target) {
                     return Err(Error::new(
-                        ErrorKind::InvalidInput,
+                        InvalidInput,
                         format!(
                             "two displays are overlapping.\ndisp_A: {:#?}, disp_B: {:#?}",
                             disp_ref,
@@ -174,7 +174,7 @@ impl Server {
                 /* check overlap */
                 if disp_ref.is_overlap(target) {
                     return Err(Error::new(
-                        ErrorKind::InvalidInput,
+                        InvalidInput,
                         format!(
                             "two displays are overlapping.\ndisp_A: {:#?}\ndisp_B: {:#?}",
                             disp_ref,
@@ -208,7 +208,7 @@ impl Server {
 
             if disp.warpzones.len() == 0 {
                 return Err(Error::new(
-                    ErrorKind::InvalidInput,
+                    InvalidInput,
                     format!("isolated client display exists.\ndisp: {:#?}", disp),
                 ));
             }
@@ -226,8 +226,9 @@ impl Server {
             self.clients.len()
         );
 
-        let mut verified: Vec<bool> = vec![false; self.clients.len()];
+        let mut clients_verified: Vec<bool> = vec![false; self.clients.len()];
 
+        // TODO: listen to clients in different thread for starting before all clients connected
         for stream in self.tcp.incoming() {
             match stream {
                 Ok(mut stream) => {
@@ -247,48 +248,85 @@ impl Server {
 
                     /* deserialize transferred client info */
                     let incoming_client: Client = match bincode::deserialize(&buffer)
-                        .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))
+                        .map_err(|e| Error::new(InvalidData, e.to_string()))
                     {
                         Ok(client) => client,
                         Err(e) => return Err(e.into()),
                     };
 
                     /* verify client */
+                    let mut incoming_verified = false;
+
                     for (i, client) in self.clients.iter_mut().enumerate() {
                         let mut client = client.borrow_mut();
 
                         if client.cid == incoming_client.cid {
                             /* verify configured displays */
-                            for disp in client.displays.iter() {
+                            let mut displays_verified: Vec<bool> =
+                                vec![false; client.displays.len()];
+
+                            for (j, disp) in client.displays.iter().enumerate() {
                                 for incoming_disp in incoming_client.displays.iter() {
-                                    // TODO: check configured displays are same
+                                    if disp.name == incoming_disp.name
+                                        && disp.id == incoming_disp.id
+                                        && disp.width == incoming_disp.width
+                                        && disp.height == incoming_disp.height
+                                    {
+                                        displays_verified[j] = true;
+                                    }
                                 }
                             }
 
+                            let mut disp_verified = true;
+
+                            for (j, item) in displays_verified.iter().enumerate() {
+                                if *item == false {
+                                    println!(
+                                        "[WRN] client display confilcts in config and actual.\nclient: {}({})\ndisp: {:#?}",
+                                        client.cid, stream.peer_addr().unwrap(), client.displays[j]
+                                    );
+                                    disp_verified = false;
+                                    break;
+                                }
+                            }
+
+                            if disp_verified == false {
+                                break;
+                            }
+
+                            /* client and displays verified */
                             client.tcp = Some(stream.try_clone().unwrap());
                             client.ip = Some(stream.peer_addr().unwrap());
-                            verified[i] = true;
+                            clients_verified[i] = true;
+                            incoming_verified = true;
 
                             println!(
-                                "client {}({}) verified",
+                                "[INF] client {}({}) verified",
                                 incoming_client.cid,
                                 client.ip.unwrap()
                             );
                         }
                     }
 
-                    /* check all clients verified */
-                    let mut ok = true;
+                    if !incoming_verified {
+                        println!(
+                            "[WRN] verification failed for incoming client {}({})",
+                            incoming_client.cid,
+                            stream.peer_addr().unwrap()
+                        );
+                    }
 
-                    for i in 0..verified.len() {
-                        if verified[i] == false {
-                            ok = false;
+                    /* check all clients verified */
+                    let mut all_verified = true;
+
+                    for item in clients_verified.iter() {
+                        if *item == false {
+                            all_verified = false;
                             break;
                         }
                     }
 
-                    /* all configured clients connected and verified */
-                    if ok == true {
+                    if all_verified == true {
                         break;
                     }
                 }
