@@ -122,13 +122,14 @@ impl Server {
             .flat_map(|c| c.borrow().disp.clone())
             .collect();
 
-        /* analyze warpzones for system displays ←→ client displays */
-        for disp in system_disp.iter() {
+        /* analyze warpzones for system displays */
+        for (i, disp) in system_disp.iter().enumerate() {
             let mut disp_ref = disp.borrow_mut();
 
             disp_ref.owner = None;
             disp_ref.owner_type = DisplayOwnerType::SERVER;
 
+            /* system displays ←→ client displays */
             for target in self.displays.iter() {
                 /* check overlap */
                 if disp_ref.is_overlap(target) {
@@ -143,6 +144,30 @@ impl Server {
                 }
 
                 /* create warpzones if touching each other */
+                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
+                    disp_ref.warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction,
+                        to: Rc::downgrade(target),
+                    });
+
+                    target.borrow_mut().warpzones.push(WarpZone {
+                        start,
+                        end,
+                        direction: direction.reverse(),
+                        to: Rc::downgrade(disp),
+                    });
+                }
+            }
+
+            /* system displays ←→ system displays */
+            for (j, target) in system_disp.iter().enumerate() {
+                if i >= j {
+                    continue;
+                }
+
+                /* no need to check overlap; just create warpzones */
                 if let Some((start, end, direction)) = disp_ref.is_touch(target) {
                     disp_ref.warpzones.push(WarpZone {
                         start,
