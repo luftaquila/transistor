@@ -200,11 +200,19 @@ impl Server {
                     });
                 }
             }
-
-            // TODO: check client display without warpzone
         }
 
-        println!("{:#?}", self.displays);
+        /* check client displays without warpzone */
+        for disp in self.displays.iter() {
+            let disp = disp.borrow();
+
+            if disp.warpzones.len() == 0 {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("isolated client display exists.\ndisp: {:#?}", disp),
+                ));
+            }
+        }
 
         /* merge all configured displays */
         self.displays.extend(system_disp);
