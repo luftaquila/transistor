@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::fs;
-use std::io::{Error, ErrorKind::*, Read};
+use std::io::{Error, ErrorKind::*, Read, Write};
 use std::net::TcpListener;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use display_info::DisplayInfo;
 use rdev::*;
@@ -15,7 +15,7 @@ pub struct Server {
     tcp: TcpListener,
     clients: Vec<Rc<RefCell<Client>>>,
     displays: Vec<Rc<RefCell<Display>>>,
-    current: Rc<RefCell<Option<Rc<RefCell<Display>>>>>,
+    current: Rc<RefCell<Option<Weak<RefCell<Display>>>>>,
 }
 
 impl Server {
@@ -368,13 +368,14 @@ impl Server {
     }
 
     pub fn capture(self) -> Result<(), Error> {
+        let current_disp = self.current.clone();
+
         grab(move |event| -> Option<Event> {
-            match self.current.clone().borrow().as_ref() {
+            let mut current = current_disp.borrow_mut();
+
+            match *current {
                 /* if there is no current display, for the first time */
                 None => {
-                    let cur = self.current.clone();
-                    let mut cur = cur.borrow_mut();
-
                     match event.event_type {
                         EventType::MouseMove { x, y } => {
                             /* identify current display if mouse moves */
@@ -392,57 +393,99 @@ impl Server {
                                     && y > d.y.into()
                                     && y < (d.y + d.height as i32).into()
                                 {
-                                    // TODO: must be dropped before change current display
-                                    *cur = Some(disp.clone());
+                                    *current = Some(Rc::downgrade(disp));
                                     break;
                                 }
                             }
                         }
                         _ => {} // else, just ignore
                     }
-                    return Some(event);
                 }
 
-                return Some(event);
-            }
+                Some(ref current_weak) => {
+                    let cur = current_weak.upgrade().unwrap();
+                    let cur = cur.borrow();
 
-            match event.event_type {
-                EventType::MouseMove { x, y } => {
-                    /* TODO: check if we are in warpzone */
+                    match event.event_type {
+                        EventType::MouseMove { x, y } => {
+                            /* check if we are in warpzone */
+                            for warpzone in cur.warpzones.iter() {
+                                match warpzone.direction {
+                                    ZoneDirection::HorizontalLeft => {
+                                        if y >= warpzone.start.into()
+                                            && y <= warpzone.end.into()
+                                            && x <= cur.x.into()
+                                        {
+                                            drop(current);
+                                            current = current_disp.borrow_mut();
+                                            *current = Some(warpzone.to.clone());
+                                            break;
+                                        }
+                                    }
+                                    ZoneDirection::HorizontalRight => {
+                                        if y >= warpzone.start.into()
+                                            && y <= warpzone.end.into()
+                                            && x >= (cur.x + cur.width as i32).into()
+                                        {
+                                            drop(current);
+                                            current = current_disp.borrow_mut();
+                                            *current = Some(warpzone.to.clone());
+                                            break;
+                                        }
+                                    }
+                                    ZoneDirection::VerticalUp => {
+                                        if x >= warpzone.start.into()
+                                            && x <= warpzone.end.into()
+                                            && y <= cur.y.into()
+                                        {
+                                            drop(current);
+                                            current = current_disp.borrow_mut();
+                                            *current = Some(warpzone.to.clone());
+                                            break;
+                                        }
+                                    }
+                                    ZoneDirection::VerticalDown => {
+                                        if x >= warpzone.start.into()
+                                            && x <= warpzone.end.into()
+                                            && y >= (cur.y + cur.height as i32).into()
+                                        {
+                                            drop(current);
+                                            current = current_disp.borrow_mut();
+                                            *current = Some(warpzone.to.clone());
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            /* translate MouseMove event coordinate.. if needed */
+                        }
 
+                        /* do nothing; maybe handle Input Source for key events.. */
+                        _ => {} // EventType::KeyPress(key) => {}
+                                // EventType::KeyRelease(key) => {}
+                                // EventType::ButtonPress(button) => {}
+                                // EventType::ButtonRelease(button) => {}
+                                // EventType::Wheel { delta_x, delta_y } => {}
+                    };
+
+                    /* check current display owner */
+                    match cur.owner_type {
+                        DisplayOwnerType::SERVER => {
+                            return Some(event);
+                        }
+                        DisplayOwnerType::CLIENT => {
+                            /* transmit event to client */
+
+                            let encoded = bincode::serialize(&event).unwrap();
+                            let size = encoded.len().to_be_bytes();
+
+                            /* ignore event in host system */
+                            return None;
+                        }
+                    }
                 }
+            };
 
-                EventType::KeyPress(key) => {}
-
-                EventType::KeyRelease(key) => {}
-
-                EventType::ButtonPress(button) => {}
-
-                EventType::ButtonRelease(button) => {}
-
-                EventType::Wheel { delta_x, delta_y } => {}
-            }
-
-            println!("[EVT] {:?}", event);
-
-            let encoded = bincode::serialize(&event).unwrap();
-            let size = encoded.len().to_be_bytes();
-
-            //     match stream.write_all(&encoded.len().to_be_bytes()) {
-            //         Ok(_) => (),
-            //         Err(e) => {
-            //             eprintln!("[ERR] TCP stream write failed: {}", e);
-            //             return;
-            //         }
-            //     }
-            //
-            //     match stream.write_all(&encoded) {
-            //         Ok(_) => (),
-            //         Err(e) => {
-            //             eprintln!("[ERR] TCP stream write failed: {}", e);
-            //             return;
-            //         }
-            //     }
             Some(event)
         })
         .map_err(|e| Error::new(Other, format!("event capture error: {:?}", e)))?;

@@ -40,23 +40,25 @@ impl Client {
             cid: Uuid::new_v4(),
         }));
 
+        let mut client_mut = client.borrow_mut();
+
         // set displays
-        client.borrow_mut().disp = DisplayInfo::all()
+        client_mut.disp = DisplayInfo::all()
             .unwrap()
             .into_iter()
             .map(|disp| Rc::new(RefCell::new(Display::from(disp))))
             .collect::<Vec<Rc<RefCell<Display>>>>();
 
         // set client reference for displays
-        for disp in client.borrow_mut().disp.iter_mut() {
-            disp.borrow_mut().owner = Some(Rc::downgrade(&client))
+        for disp in client_mut.disp.iter_mut() {
+            disp.borrow_mut().owner = Some(Rc::downgrade(&client));
         }
 
         // set cid from cid.txt
-        let cid = client.borrow().get_cid().unwrap();
-        client.borrow_mut().cid = cid;
+        let cid = client_mut.get_cid().unwrap();
+        client_mut.cid = cid;
 
-        Ok(client)
+        Ok(client.clone())
     }
 
     pub fn connect(&mut self, server: &str) -> Result<(), Error> {
