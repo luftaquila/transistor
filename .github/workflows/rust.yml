@@ -18,6 +18,8 @@ jobs:
       run: cargo build --bin transistor-server --verbose
     - name: Build client
       run: cargo build --bin transistor-client --verbose
+    - name: Test
+      run: cargo test
 
   build-linux:
     runs-on: ubuntu-latest
@@ -29,6 +31,8 @@ jobs:
       run: xvfb-run cargo build --bin transistor-server --verbose
     - name: Build client
       run: xvfb-run cargo build --bin transistor-client --verbose
+    - name: Test
+      run: xvfb-run cargo test
 
   build-macos:
     runs-on: macos-latest
@@ -38,4 +42,5 @@ jobs:
       run: cargo build --bin transistor-server --verbose
     - name: Build client
       run: cargo build --bin transistor-client --verbose
-
+    - name: Test
+      run: cargo test
