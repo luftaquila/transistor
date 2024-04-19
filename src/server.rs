@@ -368,35 +368,39 @@ impl Server {
     }
 
     pub fn capture(self) -> Result<(), Error> {
-        let current = self.current.clone();
-
         grab(move |event| -> Option<Event> {
-            /* if there is no current display */
-            if current.borrow().is_none() {
-                match event.event_type {
-                    EventType::MouseMove { x, y } => {
-                        /* identify current display if mouse moves */
-                        for disp in self.displays.iter() {
-                            let d = disp.borrow();
+            match self.current.clone().borrow().as_ref() {
+                /* if there is no current display, for the first time */
+                None => {
+                    let cur = self.current.clone();
+                    let mut cur = cur.borrow_mut();
 
-                            /* skip client displays */
-                            if let DisplayOwnerType::CLIENT = d.owner_type {
-                                continue;
-                            }
+                    match event.event_type {
+                        EventType::MouseMove { x, y } => {
+                            /* identify current display if mouse moves */
+                            for disp in self.displays.iter() {
+                                let d = disp.borrow();
 
-                            /* set current display */
-                            if x > d.x.into()
-                                && x < (d.x + d.width as i32).into()
-                                && y > d.y.into()
-                                && y < (d.y + d.height as i32).into()
-                            {
-                                // TODO: must be dropped before change current display
-                                *current.borrow_mut() = Some(disp.clone());
-                                break;
+                                /* skip client displays */
+                                if let DisplayOwnerType::CLIENT = d.owner_type {
+                                    continue;
+                                }
+
+                                /* set current display */
+                                if x > d.x.into()
+                                    && x < (d.x + d.width as i32).into()
+                                    && y > d.y.into()
+                                    && y < (d.y + d.height as i32).into()
+                                {
+                                    // TODO: must be dropped before change current display
+                                    *cur = Some(disp.clone());
+                                    break;
+                                }
                             }
                         }
+                        _ => {} // else, just ignore
                     }
-                    _ => {} // else, just ignore
+                    return Some(event);
                 }
 
                 return Some(event);
