@@ -31,9 +31,8 @@ impl Server {
         };
 
         // mkdir -p $path
-        match fs::create_dir_all(config_dir()) {
-            Ok(()) => {}
-            Err(e) => return Err(e.into()),
+        if let Err(e) = fs::create_dir_all(config_dir()) {
+            return Err(e.into());
         }
 
         Ok(server)
@@ -262,16 +261,16 @@ impl Server {
                 Ok(mut stream) => {
                     /* receive client info */
                     let mut size = [0u8; 8];
-                    match stream.read_exact(&mut size) {
-                        Ok(()) => {}
-                        Err(e) => return Err(e.into()),
+
+                    if let Err(e) = stream.read_exact(&mut size) {
+                        return Err(e.into());
                     }
 
                     let len = u64::from_be_bytes(size) as usize;
                     let mut buffer = vec![0u8; len];
-                    match stream.read_exact(&mut buffer[..len]) {
-                        Ok(()) => {}
-                        Err(e) => return Err(e.into()),
+
+                    if let Err(e) = stream.read_exact(&mut buffer[..len]) {
+                        return Err(e.into());
                     }
 
                     /* deserialize transferred client info */

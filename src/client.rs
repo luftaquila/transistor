@@ -69,14 +69,12 @@ impl Client {
         let tcp = self.tcp.as_ref().unwrap();
         let mut tcp = tcp.borrow_mut();
 
-        match tcp.write_all(&encoded.len().to_be_bytes()) {
-            Ok(()) => {}
-            Err(e) => return Err(e.into()),
+        if let Err(e) = tcp.write_all(&encoded.len().to_be_bytes()) {
+            return Err(e.into());
         };
 
-        match tcp.write_all(&encoded) {
-            Ok(()) => {}
-            Err(e) => return Err(e.into()),
+        if let Err(e) = tcp.write_all(&encoded) {
+            return Err(e.into());
         };
 
         Ok(())
