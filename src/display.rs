@@ -1,5 +1,7 @@
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};

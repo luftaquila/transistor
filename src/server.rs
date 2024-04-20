@@ -1,15 +1,18 @@
-use std::cell::RefCell;
-use std::fs;
-use std::io::{Error, ErrorKind::*, Read, Write};
-use std::net::TcpListener;
-use std::rc::{Rc, Weak};
+use std::{
+    cell::RefCell,
+    fs,
+    io::{Error, ErrorKind::*, Read, Write},
+    mem,
+    net::TcpListener,
+    rc::{Rc, Weak},
+};
 
 use display_info::DisplayInfo;
 use rdev::*;
 
-use crate::client::*;
-use crate::display::*;
-use crate::utils::config_dir;
+use crate::{
+    add_warpzone, client::*, display::*, tcp_stream_read, tcp_stream_write, utils::config_dir,
+};
 
 pub struct Server {
     tcp: TcpListener,
@@ -144,23 +147,8 @@ impl Server {
                         ),
                     ));
                 }
-
                 /* create warpzones if touching each other */
-                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
-                    disp_ref.warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction,
-                        to: Rc::downgrade(target),
-                    });
-
-                    target.borrow_mut().warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction: direction.reverse(),
-                        to: Rc::downgrade(disp),
-                    });
-                }
+                add_warpzone!(disp, disp_ref, target);
             }
 
             /* system displays ←→ system displays */
@@ -168,23 +156,8 @@ impl Server {
                 if i >= j {
                     continue;
                 }
-
                 /* no need to check overlap; just create warpzones */
-                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
-                    disp_ref.warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction,
-                        to: Rc::downgrade(target),
-                    });
-
-                    target.borrow_mut().warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction: direction.reverse(),
-                        to: Rc::downgrade(disp),
-                    });
-                }
+                add_warpzone!(disp, disp_ref, target);
             }
         }
 
@@ -209,23 +182,8 @@ impl Server {
                         ),
                     ));
                 }
-
                 /* create warpzones if touching each other */
-                if let Some((start, end, direction)) = disp_ref.is_touch(target) {
-                    disp_ref.warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction,
-                        to: Rc::downgrade(target),
-                    });
-
-                    target.borrow_mut().warpzones.push(WarpZone {
-                        start,
-                        end,
-                        direction: direction.reverse(),
-                        to: Rc::downgrade(disp),
-                    });
-                }
+                add_warpzone!(disp, disp_ref, target);
             }
         }
 
@@ -259,19 +217,9 @@ impl Server {
         for stream in self.tcp.incoming() {
             match stream {
                 Ok(mut stream) => {
-                    /* receive client info */
-                    let mut size = [0u8; 8];
-
-                    if let Err(e) = stream.read_exact(&mut size) {
-                        return Err(e.into());
-                    }
-
-                    let len = u64::from_be_bytes(size) as usize;
-                    let mut buffer = vec![0u8; len];
-
-                    if let Err(e) = stream.read_exact(&mut buffer[..len]) {
-                        return Err(e.into());
-                    }
+                    /* receive client info; more enough bytes for bincode serialization overhead */
+                    let mut buffer = [0u8; mem::size_of::<Client>() + 16];
+                    tcp_stream_read!(stream, buffer);
 
                     /* deserialize transferred client info */
                     let incoming_client: Client = match bincode::deserialize(&buffer)
@@ -482,16 +430,7 @@ impl Server {
                             let tcp = owner.tcp.as_ref().unwrap();
                             let mut stream = tcp.borrow_mut();
 
-                            let encoded = bincode::serialize(&event).unwrap();
-                            let size = encoded.len().to_be_bytes();
-
-                            if let Err(e) = stream.write_all(&size) {
-                                eprintln!("[ERR] TCP stream write failed: {}", e);
-                            }
-
-                            if let Err(e) = stream.write_all(&encoded) {
-                                eprintln!("[ERR] TCP stream write failed: {}", e);
-                            }
+                            tcp_stream_write!(stream, event);
 
                             /* ignore event in host system */
                             return None;

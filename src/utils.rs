@@ -19,3 +19,59 @@ pub fn print_displays() {
     }
 }
 
+#[macro_export]
+macro_rules! add_warpzone {
+    ($disp:expr, $disp_ref:expr, $target:expr) => {
+        if let Some((start, end, direction)) = $disp_ref.is_touch($target) {
+            $disp_ref.warpzones.push(WarpZone {
+                start,
+                end,
+                direction,
+                to: Rc::downgrade($target),
+            });
+
+            $target.borrow_mut().warpzones.push(WarpZone {
+                start,
+                end,
+                direction: direction.reverse(),
+                to: Rc::downgrade($disp),
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! tcp_stream_write {
+    ($stream:expr, $data:expr) => {
+        let encoded = bincode::serialize(&$data).unwrap();
+
+        /* force 4 byte data length */
+        let len = encoded.len() as u32;
+        let size = len.to_be_bytes();
+
+        if let Err(e) = $stream.write_all(&size) {
+            eprintln!("[ERR] TCP stream write failed: {}", e);
+        }
+
+        if let Err(e) = $stream.write_all(&encoded) {
+            eprintln!("[ERR] TCP stream write failed: {}", e);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! tcp_stream_read {
+    ($stream:expr, $buffer:expr) => {{
+        let mut size = [0u8; 4];
+
+        if let Err(e) = $stream.read_exact(&mut size) {
+            return Err(e.into());
+        }
+
+        let len = u32::from_be_bytes(size) as usize;
+
+        if let Err(e) = $stream.read_exact(&mut $buffer[..len]) {
+            return Err(e.into());
+        }
+    }};
+}

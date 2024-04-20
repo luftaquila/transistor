@@ -1,18 +1,18 @@
-use std::cell::RefCell;
-use std::fs;
-use std::fs::File;
-use std::io::{Error, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
-use std::rc::Rc;
-use std::str::FromStr;
+use std::{
+    cell::RefCell,
+    fs::{self, File},
+    io::{Error, Write},
+    net::{SocketAddr, TcpStream},
+    path::PathBuf,
+    rc::Rc,
+    str::FromStr,
+};
 
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::display::*;
-use crate::utils::config_dir;
+use crate::{display::*, tcp_stream_write, utils::config_dir};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
@@ -65,17 +65,10 @@ impl Client {
         let tcp = TcpStream::connect(server)?;
         self.tcp = Some(Rc::new(RefCell::new(tcp)));
 
-        let encoded = bincode::serialize(&self).unwrap();
-        let tcp = self.tcp.as_ref().unwrap();
-        let mut tcp = tcp.borrow_mut();
+        let stream = self.tcp.as_ref().unwrap();
+        let mut stream = stream.borrow_mut();
 
-        if let Err(e) = tcp.write_all(&encoded.len().to_be_bytes()) {
-            return Err(e.into());
-        };
-
-        if let Err(e) = tcp.write_all(&encoded) {
-            return Err(e.into());
-        };
+        tcp_stream_write!(stream, self);
 
         Ok(())
     }
