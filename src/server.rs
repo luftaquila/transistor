@@ -322,8 +322,9 @@ impl Server {
                                 break;
                             }
 
-                            /* client and displays verified */
-                            client.tcp = Some(stream.try_clone().unwrap());
+                            /* client and displays verified; set client network info */
+                            let tcp = Rc::new(RefCell::new(stream.try_clone().unwrap()));
+                            client.tcp = Some(tcp);
                             client.ip = Some(stream.peer_addr().unwrap());
                             clients_verified[i] = true;
                             incoming_verified = true;
@@ -402,8 +403,8 @@ impl Server {
                     }
                 }
 
-                Some(ref current_weak) => {
-                    let cur = current_weak.upgrade().unwrap();
+                Some(ref cur) => {
+                    let cur = cur.upgrade().unwrap();
                     let cur = cur.borrow();
 
                     match event.event_type {
@@ -473,11 +474,25 @@ impl Server {
                         DisplayOwnerType::SERVER => {
                             return Some(event);
                         }
+
                         DisplayOwnerType::CLIENT => {
                             /* transmit event to client */
+                            let owner = cur.owner.as_ref().and_then(|o| o.upgrade()).unwrap();
+                            let owner = owner.borrow_mut();
+
+                            let tcp = owner.tcp.as_ref().unwrap();
+                            let mut stream = tcp.borrow_mut();
 
                             let encoded = bincode::serialize(&event).unwrap();
                             let size = encoded.len().to_be_bytes();
+
+                            if let Err(e) = stream.write_all(&size) {
+                                eprintln!("[ERR] TCP stream write failed: {}", e);
+                            }
+
+                            if let Err(e) = stream.write_all(&encoded) {
+                                eprintln!("[ERR] TCP stream write failed: {}", e);
+                            }
 
                             /* ignore event in host system */
                             return None;

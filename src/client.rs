@@ -19,7 +19,7 @@ pub struct Client {
     #[serde(skip)]
     pub ip: Option<SocketAddr>,
     #[serde(skip)]
-    pub tcp: Option<TcpStream>,
+    pub tcp: Option<Rc<RefCell<TcpStream>>>,
     #[serde(skip)]
     pub disp: Vec<Rc<RefCell<Display>>>,
     pub displays: Vec<Display>,
@@ -62,24 +62,19 @@ impl Client {
     }
 
     pub fn connect(&mut self, server: &str) -> Result<(), Error> {
-        self.tcp = match TcpStream::connect(server) {
-            Ok(stream) => Some(stream),
-            Err(e) => return Err(e.into()),
-        };
+        let tcp = TcpStream::connect(server)?;
+        self.tcp = Some(Rc::new(RefCell::new(tcp)));
 
         let encoded = bincode::serialize(&self).unwrap();
+        let tcp = self.tcp.as_ref().unwrap();
+        let mut tcp = tcp.borrow_mut();
 
-        match self
-            .tcp
-            .as_ref()
-            .unwrap()
-            .write_all(&encoded.len().to_be_bytes())
-        {
+        match tcp.write_all(&encoded.len().to_be_bytes()) {
             Ok(()) => {}
             Err(e) => return Err(e.into()),
         };
 
-        match self.tcp.as_ref().unwrap().write_all(&encoded) {
+        match tcp.write_all(&encoded) {
             Ok(()) => {}
             Err(e) => return Err(e.into()),
         };
