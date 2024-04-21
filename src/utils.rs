@@ -41,6 +41,19 @@ macro_rules! add_warpzone {
 }
 
 #[macro_export]
+macro_rules! client_point {
+    ($x: expr, $y: expr, $target: expr) => {{
+        let tgt = $target.upgrade().unwrap();
+        let tgt = tgt.borrow();
+
+        WarpPoint {
+            x: $x - tgt.x,
+            y: $y - tgt.y,
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! tcp_stream_write {
     ($stream:expr, $data:expr) => {
         let encoded = bincode::serialize(&$data).unwrap();
@@ -61,7 +74,7 @@ macro_rules! tcp_stream_write {
 
 #[macro_export]
 macro_rules! tcp_stream_read {
-    ($stream:expr, $buffer:expr) => {{
+    ($stream:expr, $buffer:expr) => {
         let mut size = [0u8; 4];
 
         if let Err(e) = $stream.read_exact(&mut size) {
@@ -73,7 +86,7 @@ macro_rules! tcp_stream_read {
         if let Err(e) = $stream.read_exact(&mut $buffer[..len]) {
             return Err(e.into());
         }
-    }};
+    };
 }
 
 #[macro_export]
@@ -110,14 +123,17 @@ macro_rules! warp {
     ($window:expr, $event_loop:expr) => {
         $window.request_redraw();
 
+        println!("EventLoop started!");
+
         $event_loop.run_return(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
 
-            println!("winit: {:?}", event);
+            // println!("winit: {:?}", event);
 
             $window
                 .set_cursor_position(PhysicalPosition::new(50, 50))
                 .unwrap();
+
             // *control_flow = ControlFlow::Exit;
         });
     };

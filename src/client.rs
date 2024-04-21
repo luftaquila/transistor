@@ -1,7 +1,8 @@
 use std::{
     cell::RefCell,
     fs::{self, File},
-    io::{Error, Write},
+    io::{Error, Read, Write},
+    mem,
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     rc::Rc,
@@ -12,7 +13,7 @@ use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{display::*, tcp_stream_write, utils::config_dir};
+use crate::{display::*, tcp_stream_read, tcp_stream_write, utils::config_dir};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Client {
@@ -64,9 +65,7 @@ impl Client {
     pub fn connect(&mut self, server: &str) -> Result<(), Error> {
         let tcp = TcpStream::connect(server)?;
         self.tcp = Some(Rc::new(RefCell::new(tcp)));
-
-        let stream = self.tcp.as_ref().unwrap();
-        let mut stream = stream.borrow_mut();
+        let mut stream = self.tcp.as_ref().unwrap().borrow_mut();
 
         /* transmit client info to server */
         tcp_stream_write!(stream, self);
@@ -77,7 +76,18 @@ impl Client {
     }
 
     pub fn listen(&self) -> Result<(), Error> {
+        let mut stream = self.tcp.as_ref().unwrap().borrow_mut();
+
+        /* receive warp point */
+        let mut buffer = [0u8; mem::size_of::<WarpPoint>() + 16];
+        tcp_stream_read!(stream, buffer);
+
+        let warp_point: WarpPoint = bincode::deserialize(&buffer).unwrap();
+
+        println!("warp point: {:?}", warp_point);
+
         // TODO: handle events from server
+        loop {}
 
         Ok(())
     }

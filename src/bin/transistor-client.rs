@@ -29,44 +29,5 @@ fn main() -> Result<(), Error> {
 
     client.listen()?;
 
-    loop {}
-
     Ok(())
 }
-
-// fn listen() {
-//     let mut buffer = Vec::with_capacity(50);
-//     let mut size = [0u8; 8];
-
-//     loop {
-//         match stream.read_exact(&mut size) {
-//             Ok(_) => {}
-//             Err(e) => {
-//                 eprintln!("[ERR] event size read failed: {}", e);
-//                 continue;
-//             }
-//         };
-
-//         let len = u64::from_be_bytes(size) as usize;
-//         buffer.resize(len, 0);
-
-//         match stream.read_exact(&mut buffer[..len]) {
-//             Ok(_) => {
-//                 let event: Event = match bincode::deserialize(&buffer) {
-//                     Ok(event) => event,
-//                     Err(e) => {
-//                         eprintln!("[ERR] event deserialization failed: {}", e);
-//                         continue;
-//                     }
-//                 };
-
-//                 println!("[EVT] <{}> {:?}", len, event);
-//                 buffer.clear();
-//             }
-//             Err(e) => {
-//                 eprintln!("[ERR] stream read failed: {}", e);
-//                 break;
-//             }
-//         }
-//     }
-// }

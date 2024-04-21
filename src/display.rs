@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::client::*;
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub struct WarpPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum ZoneDirection {
     HorizontalLeft,

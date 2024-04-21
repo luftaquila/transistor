@@ -12,15 +12,14 @@ use pixels::{Pixels, SurfaceTexture};
 use rdev::*;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
-    event::Event,
     event_loop::{ControlFlow, EventLoop},
     platform::run_return::EventLoopExtRunReturn,
     window::WindowBuilder,
 };
 
 use crate::{
-    add_warpzone, client::*, create_warpgate, display::*, tcp_stream_read, tcp_stream_write,
-    utils::config_dir, warp,
+    add_warpzone, client::*, client_point, create_warpgate, display::*, tcp_stream_read,
+    tcp_stream_write, utils::config_dir, warp,
 };
 
 pub struct Server {
@@ -374,63 +373,66 @@ impl Server {
                     let cur = cur.upgrade().unwrap();
                     let cur = cur.borrow();
 
+                    let mut warp_point: Option<WarpPoint> = None;
+
                     match event.event_type {
                         EventType::MouseMove { x, y } => {
+                            let x = x as i32;
+                            let y = y as i32;
+
                             /* check if we are in warpzone */
-                            for warpzone in cur.warpzones.iter() {
-                                match warpzone.direction {
+                            for wz in cur.warpzones.iter() {
+                                match wz.direction {
                                     ZoneDirection::HorizontalLeft => {
-                                        if y >= warpzone.start.into()
-                                            && y <= warpzone.end.into()
-                                            && x <= cur.x.into()
-                                        {
+                                        if y >= wz.start && y <= wz.end && x <= cur.x {
                                             drop(current);
-                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(wz.to.clone());
+                                            warp_point = Some(client_point!(x, y, wz.to.clone()));
                                             break;
                                         }
                                     }
                                     ZoneDirection::HorizontalRight => {
-                                        if y >= warpzone.start.into()
-                                            && y <= warpzone.end.into()
-                                            && x >= (cur.x + cur.width as i32).into()
-                                        {
+                                        let cur_x_r = cur.x + cur.width as i32;
+
+                                        if y >= wz.start && y <= wz.end && x >= cur_x_r {
                                             drop(current);
-                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(wz.to.clone());
+                                            warp_point = Some(client_point!(x, y, wz.to.clone()));
                                             break;
                                         }
                                     }
                                     ZoneDirection::VerticalUp => {
-                                        if x >= warpzone.start.into()
-                                            && x <= warpzone.end.into()
-                                            && y <= cur.y.into()
-                                        {
+                                        if x >= wz.start && x <= wz.end && y <= cur.y {
                                             drop(current);
-                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(wz.to.clone());
+                                            warp_point = Some(client_point!(x, y, wz.to.clone()));
                                             break;
                                         }
                                     }
                                     ZoneDirection::VerticalDown => {
-                                        if x >= warpzone.start.into()
-                                            && x <= warpzone.end.into()
-                                            && y >= (cur.y + cur.height as i32).into()
-                                        {
+                                        let cur_y_b = cur.y + cur.height as i32;
+
+                                        if x >= wz.start && x <= wz.end && y >= cur_y_b {
                                             drop(current);
-                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(wz.to.clone());
+                                            warp_point = Some(client_point!(x, y, wz.to.clone()));
                                             break;
                                         }
                                     }
                                 }
                             }
-                            /* translate MouseMove event coordinate.. if needed */
                         }
-
-                        /* do nothing; maybe handle Input Source for key events.. */
-                        _ => {} // EventType::KeyPress(key) => {}
-                                // EventType::KeyRelease(key) => {}
-                                // EventType::ButtonPress(button) => {}
-                                // EventType::ButtonRelease(button) => {}
-                                // EventType::Wheel { delta_x, delta_y } => {}
+                        _ => {}
                     };
+
+                    /* no warp */
+                    if warp_point.is_none() {
+                        return Some(event);
+                    }
+
+                    /* update cur as current_disp changed */
+                    let cur = current_disp.borrow().as_ref().unwrap().upgrade().unwrap();
+                    let cur = cur.borrow();
 
                     /* check current display owner */
                     match cur.owner_type {
@@ -446,7 +448,8 @@ impl Server {
                             let mut stream = tcp.borrow_mut();
 
                             /* tell client exact warp point */
-                            tcp_stream_write!(stream, event);
+                            println!("warp point: {:?}", warp_point);
+                            tcp_stream_write!(stream, warp_point.unwrap());
 
                             /* warp to client; hide cursor at server */
                             on_warp.set(true);
