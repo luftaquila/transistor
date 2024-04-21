@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     fs,
     io::{Error, ErrorKind::*, Read, Write},
     mem,
@@ -8,10 +8,19 @@ use std::{
 };
 
 use display_info::DisplayInfo;
+use pixels::{Pixels, SurfaceTexture};
 use rdev::*;
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    event::Event,
+    event_loop::{ControlFlow, EventLoop},
+    platform::run_return::EventLoopExtRunReturn,
+    window::WindowBuilder,
+};
 
 use crate::{
-    add_warpzone, client::*, display::*, tcp_stream_read, tcp_stream_write, utils::config_dir,
+    add_warpzone, client::*, create_warpgate, display::*, tcp_stream_read, tcp_stream_write,
+    utils::config_dir, warp,
 };
 
 pub struct Server {
@@ -269,8 +278,12 @@ impl Server {
                                 break;
                             }
 
-                            /* client and displays verified; set client network info */
+                            /* client and its displays are verified */
                             let tcp = Rc::new(RefCell::new(stream.try_clone().unwrap()));
+
+                            /* TODO: tell warpzones to client */
+
+                            /* set client network */
                             client.tcp = Some(tcp);
                             client.ip = Some(stream.peer_addr().unwrap());
                             clients_verified[i] = true;
@@ -318,7 +331,14 @@ impl Server {
     pub fn capture(self) -> Result<(), Error> {
         let current_disp = self.current.clone();
 
-        grab(move |event| -> Option<Event> {
+        let on_warp = Cell::new(false);
+
+        grab(move |event| -> Option<rdev::Event> {
+            /* skip event on rdev if cursor is warped */
+            if on_warp.get() {
+                return Some(event);
+            }
+
             let mut current = current_disp.borrow_mut();
 
             match *current {
@@ -365,8 +385,7 @@ impl Server {
                                             && x <= cur.x.into()
                                         {
                                             drop(current);
-                                            current = current_disp.borrow_mut();
-                                            *current = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
                                             break;
                                         }
                                     }
@@ -376,8 +395,7 @@ impl Server {
                                             && x >= (cur.x + cur.width as i32).into()
                                         {
                                             drop(current);
-                                            current = current_disp.borrow_mut();
-                                            *current = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
                                             break;
                                         }
                                     }
@@ -387,8 +405,7 @@ impl Server {
                                             && y <= cur.y.into()
                                         {
                                             drop(current);
-                                            current = current_disp.borrow_mut();
-                                            *current = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
                                             break;
                                         }
                                     }
@@ -398,8 +415,7 @@ impl Server {
                                             && y >= (cur.y + cur.height as i32).into()
                                         {
                                             drop(current);
-                                            current = current_disp.borrow_mut();
-                                            *current = Some(warpzone.to.clone());
+                                            *current_disp.borrow_mut() = Some(warpzone.to.clone());
                                             break;
                                         }
                                     }
@@ -423,14 +439,21 @@ impl Server {
                         }
 
                         DisplayOwnerType::CLIENT => {
-                            /* transmit event to client */
+                            /* prepare client tcp stream */
                             let owner = cur.owner.as_ref().and_then(|o| o.upgrade()).unwrap();
                             let owner = owner.borrow_mut();
-
                             let tcp = owner.tcp.as_ref().unwrap();
                             let mut stream = tcp.borrow_mut();
 
+                            /* tell client exact warp point */
                             tcp_stream_write!(stream, event);
+
+                            /* warp to client; hide cursor at server */
+                            on_warp.set(true);
+                            // TODO: create warpgate earlier; to reduce delay
+                            let (window, mut el) = create_warpgate!();
+                            warp!(window, el);
+                            on_warp.set(false);
 
                             /* ignore event in host system */
                             return None;

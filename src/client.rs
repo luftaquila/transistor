@@ -68,13 +68,16 @@ impl Client {
         let stream = self.tcp.as_ref().unwrap();
         let mut stream = stream.borrow_mut();
 
+        /* transmit client info to server */
         tcp_stream_write!(stream, self);
+
+        /* TODO: receive warpzone info from server */
 
         Ok(())
     }
 
     pub fn listen(&self) -> Result<(), Error> {
-        // TODO: implement from here
+        // TODO: handle events from server
 
         Ok(())
     }
