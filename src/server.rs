@@ -226,7 +226,7 @@ impl Server {
             match stream {
                 Ok(mut stream) => {
                     /* receive client info; more enough bytes for bincode serialization overhead */
-                    let mut buffer = [0u8; mem::size_of::<Client>() + 16];
+                    let mut buffer = [0u8; mem::size_of::<Client>() * 2];
                     tcp_stream_read!(stream, buffer);
 
                     /* deserialize transferred client info */
@@ -382,9 +382,14 @@ impl Server {
 
                             /* check if we are in warpzone */
                             for wz in cur.warpzones.iter() {
+                                let margin = 1;
+
                                 match wz.direction {
                                     ZoneDirection::HorizontalLeft => {
-                                        if y >= wz.start && y <= wz.end && x <= cur.x {
+                                        if y >= wz.start - margin
+                                            && y <= wz.end + margin
+                                            && x <= cur.x + margin
+                                        {
                                             drop(current);
                                             *current_disp.borrow_mut() = Some(wz.to.clone());
                                             warp_point = Some(client_point!(x, y, wz.to.clone()));
@@ -392,9 +397,10 @@ impl Server {
                                         }
                                     }
                                     ZoneDirection::HorizontalRight => {
-                                        let cur_x_r = cur.x + cur.width as i32;
-
-                                        if y >= wz.start && y <= wz.end && x >= cur_x_r {
+                                        if y >= wz.start - margin
+                                            && y <= wz.end + margin
+                                            && x >= (cur.x + cur.width as i32) - margin
+                                        {
                                             drop(current);
                                             *current_disp.borrow_mut() = Some(wz.to.clone());
                                             warp_point = Some(client_point!(x, y, wz.to.clone()));
@@ -402,7 +408,10 @@ impl Server {
                                         }
                                     }
                                     ZoneDirection::VerticalUp => {
-                                        if x >= wz.start && x <= wz.end && y <= cur.y {
+                                        if x >= wz.start - margin
+                                            && x <= wz.end + margin
+                                            && y <= cur.y + margin
+                                        {
                                             drop(current);
                                             *current_disp.borrow_mut() = Some(wz.to.clone());
                                             warp_point = Some(client_point!(x, y, wz.to.clone()));
@@ -410,9 +419,10 @@ impl Server {
                                         }
                                     }
                                     ZoneDirection::VerticalDown => {
-                                        let cur_y_b = cur.y + cur.height as i32;
-
-                                        if x >= wz.start && x <= wz.end && y >= cur_y_b {
+                                        if x >= wz.start - margin
+                                            && x <= wz.end + margin
+                                            && y >= (cur.y + cur.height as i32) - margin
+                                        {
                                             drop(current);
                                             *current_disp.borrow_mut() = Some(wz.to.clone());
                                             warp_point = Some(client_point!(x, y, wz.to.clone()));
