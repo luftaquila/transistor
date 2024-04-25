@@ -13,7 +13,7 @@ pub struct Server {
     tcp: TcpListener,
     clients: HashMap<u32, Client>,
     displays: HashMap<u32, Display>,
-    disp_list: AssignedDisplays,
+    disp_ids: AssignedDisplays,
     current: u32,
 }
 
@@ -26,14 +26,14 @@ impl Server {
             .collect();
 
         let system = display_vec.iter().map(|x| x.id).collect();
-        let displays = display_vec.iter().map(|x| (x.id, x.clone())).collect();
         let current = display_vec.iter().find(|x| x.is_primary).unwrap().id;
+        let displays = display_vec.into_iter().map(|x| (x.id, x)).collect();
 
         Ok(Server {
             tcp: TcpListener::bind(("0.0.0.0", port))?,
             clients: HashMap::new(),
             displays,
-            disp_list: AssignedDisplays {
+            disp_ids: AssignedDisplays {
                 system,
                 client: Vec::new(),
             },
