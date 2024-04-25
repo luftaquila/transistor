@@ -6,15 +6,15 @@ use display_info::DisplayInfo;
 use mouce::Mouse;
 
 use crate::display::*;
-use crate::Client;
+use crate::client::*;
 
 #[derive(Debug)]
 pub struct Server {
     tcp: TcpListener,
-    clients: HashMap<u32, Client>,
-    displays: HashMap<u32, Display>,
+    clients: HashMap<Cid, Client>,
+    displays: HashMap<Did, Display>,
     disp_ids: AssignedDisplays,
-    current: u32,
+    current: Did,
 }
 
 impl Server {

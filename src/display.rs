@@ -2,6 +2,10 @@ use display_info::DisplayInfo;
 use rand;
 use serde::{Deserialize, Serialize};
 
+use crate::Cid;
+
+pub type Did = u32;
+
 #[derive(Debug, Clone, Copy)]
 pub enum ZoneDirection {
     HorizontalLeft,
@@ -26,18 +30,18 @@ pub struct WarpZone {
     pub start: i32,
     pub end: i32,
     pub direction: ZoneDirection,
-    pub to: u32,
+    pub to: Cid,
 }
 
 #[derive(Debug)]
 pub struct AssignedDisplays {
-    pub system: Vec<u32>,
-    pub client: Vec<u32>,
+    pub system: Vec<Did>,
+    pub client: Vec<Did>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Display {
-    pub id: u32,
+    pub id: Did,
     pub x: i32,
     pub y: i32,
     pub width: i32,
@@ -48,7 +52,7 @@ pub struct Display {
     pub is_primary: bool,
     #[serde(skip)]
     pub warpzones: Vec<WarpZone>,
-    pub owner: u32,
+    pub owner: Cid,
 }
 
 impl From<DisplayInfo> for Display {
