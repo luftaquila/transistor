@@ -9,6 +9,10 @@ fn main() -> Result<(), Error> {
 
     print_displays();
 
+    let server = Server::new(PORT);
+
+    println!("{:?}", server);
+
     Ok(())
 }
 
