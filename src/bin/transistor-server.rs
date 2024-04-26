@@ -9,10 +9,10 @@ fn main() -> Result<(), Error> {
 
     print_displays();
 
-    let server = Server::new(PORT);
+    let client_config = config_dir!().join("authorized_clients.json");
+    let server = Server::new(PORT, client_config)?;
 
     println!("{:?}", server);
 
     Ok(())
 }
-
