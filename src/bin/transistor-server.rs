@@ -2,8 +2,6 @@ use std::io::Error;
 
 use transistor::*;
 
-const PORT: u16 = 2426;
-
 fn main() -> Result<(), Error> {
     println!("[INF] transistor server startup!");
 
@@ -16,9 +14,7 @@ fn main() -> Result<(), Error> {
 
     println!("{:?}", server);
 
-    loop {
-        
-    }
+    loop { }
 
     Ok(())
 }

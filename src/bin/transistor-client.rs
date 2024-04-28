@@ -3,8 +3,6 @@ use std::io::{Error, ErrorKind::*};
 
 use transistor::*;
 
-const PORT: u16 = 2426;
-
 fn main() -> Result<(), Error> {
     /* parse server adddress from command line arguments */
     let args: Vec<String> = env::args().collect();
@@ -24,7 +22,7 @@ fn main() -> Result<(), Error> {
 
     let mut client = Client::new(server)?;
 
-    client.start();
+    client.start()?;
 
     loop { }
 

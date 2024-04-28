@@ -10,6 +10,7 @@ use std::thread;
 use display_info::DisplayInfo;
 use mouce::Mouse;
 
+use crate::tcp_stream_write;
 use crate::{client::*, tcp_stream_read};
 use crate::display::*;
 
@@ -66,11 +67,13 @@ fn handle_client(port: u16, clients: Arc<Mutex<HashMap<Cid, Client>>>, config: P
         /* read cid from remote client */
         let mut buffer = [0u8; mem::size_of::<Cid>()];
         tcp_stream_read!(stream, buffer);
-        let cid = Cid::from_be_bytes(buffer);
+        let cid = bincode::deserialize(&buffer).unwrap();
+
+        println!("incoming cid: {}", cid);
 
         /* reject not known client */
         if !authorized.contains(&cid) {
-
+            tcp_stream_write!(stream, 0);
         }
 
         let client = Client {
