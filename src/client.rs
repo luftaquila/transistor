@@ -1,10 +1,14 @@
-use std::{mem, u32};
-use std::{fs, net::TcpStream};
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind::*, Read, Write};
+use std::{fs, net::TcpStream};
+use std::{mem, u32};
 
+use bincode::deserialize;
+use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 
-use crate::{config_dir, tcp_stream_read, tcp_stream_write};
+use crate::display::*;
+use crate::*;
 
 pub type Cid = u32;
 
@@ -28,23 +32,48 @@ impl Client {
         })
     }
 
-    pub fn start(&mut self) -> Result<(), Error>{
-        /* send cid to server */
+    pub fn start(&mut self) -> Result<(), Error> {
+        /* transmit cid to server */
         tcp_stream_write!(self.tcp, self.cid);
 
-        /* get display counts; 0 is unauthorized */
-        let mut buffer = [0u8; mem::size_of::<u32>()];
+        /* receive display counts; 0 is unauthorized */
+        let mut buffer = vec![0u8; mem::size_of::<u32>()];
         tcp_stream_read!(self.tcp, buffer);
-        let disp_cnt: u32 = bincode::deserialize(&buffer).unwrap();
-
-        println!("cnt: {}", disp_cnt);
+        let disp_cnt: u32 = deserialize(&buffer).unwrap();
 
         if disp_cnt < 1 {
             return Err(Error::new(NotConnected, "[ERR] authorization failed"));
         }
 
+        /* receive server's current display configurations */
+        tcp_stream_read_resize!(self.tcp, buffer);
+        let server_disp_map: HashMap<Did, Display> = deserialize(&buffer).unwrap();
+        let server_disp: Vec<Display> = server_disp_map.values().cloned().collect();
+
+        /* configure our displays' attach position */
+        let displays: Vec<Display> = set_display_position(server_disp);
+        tcp_stream_write!(self.tcp, displays);
+
+        /* wait server ack */
+        tcp_stream_read!(self.tcp, buffer);
+
+        if let HandshakeStatus::HandshakeErr = deserialize(&buffer).unwrap() {
+            return Err(Error::new(InvalidData, "[ERR] attach request rejected"));
+        };
+
         Ok(())
     }
+}
+
+fn set_display_position(server_disp: Vec<Display>) -> Vec<Display> {
+    let system_disp: Vec<Display> = DisplayInfo::all()
+        .expect("[ERR] failed to get system displays")
+        .into_iter()
+        .map(Display::from)
+        .collect();
+
+    // TODO
+    system_disp
 }
 
 fn load_or_generate_cid() -> Result<Cid, Error> {

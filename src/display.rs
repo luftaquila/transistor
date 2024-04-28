@@ -41,6 +41,7 @@ pub struct AssignedDisplays {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Display {
+    pub name: String,
     pub id: Did,
     pub x: i32,
     pub y: i32,
@@ -58,7 +59,7 @@ pub struct Display {
 impl From<DisplayInfo> for Display {
     fn from(item: DisplayInfo) -> Self {
         Display {
-            // name - not meaningful on every platform
+            name: item.name,
             id: rand::random(),
             // raw_handle - cannot serialize
             x: item.x,

@@ -1,4 +1,11 @@
 use display_info::DisplayInfo;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum HandshakeStatus {
+    HandshakeOk,
+    HandshakeErr,
+}
 
 pub fn print_displays() {
     println!("[INF] detected system displays:");
@@ -23,15 +30,29 @@ macro_rules! config_dir {
 
 #[macro_export]
 macro_rules! tcp_stream_read {
-    ($stream:expr, $buffer:expr) => {
+    ($stream:expr, $buffer:expr) => {{
         let mut size = [0u8; 4];
-
         $stream.read_exact(&mut size)?;
 
         let len = u32::from_be_bytes(size) as usize;
-
         $stream.read_exact(&mut $buffer[..len])?;
-    };
+
+        len
+    }};
+}
+
+#[macro_export]
+macro_rules! tcp_stream_read_resize {
+    ($stream:expr, $buffer:expr) => {{
+        let mut size = [0u8; 4];
+        $stream.read_exact(&mut size)?;
+
+        let len = u32::from_be_bytes(size) as usize;
+        $buffer.resize(len, 0);
+        $stream.read_exact(&mut $buffer)?;
+
+        len
+    }};
 }
 
 #[macro_export]

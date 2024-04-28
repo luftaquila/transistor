@@ -1,23 +1,24 @@
 use std::collections::HashMap;
 use std::fs;
-use std::mem;
 use std::io::{Error, ErrorKind::*, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::mem;
+use std::net::TcpListener;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
+use bincode::deserialize;
 use display_info::DisplayInfo;
 use mouce::Mouse;
 
-use crate::tcp_stream_write;
-use crate::{client::*, tcp_stream_read};
+use crate::client::*;
 use crate::display::*;
+use crate::*;
 
 #[derive(Debug)]
 pub struct Server {
-    clients: Arc<Mutex<HashMap<Cid, Client>>>,
-    displays: HashMap<Did, Display>,
+    clients: Arc<RwLock<HashMap<Cid, Client>>>,
+    displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: AssignedDisplays,
     current: Did,
 }
@@ -36,10 +37,12 @@ impl Server {
 
         let system = disp.iter().map(|x| x.id).collect();
         let current = disp.iter().find(|x| x.is_primary).unwrap_or(&disp[0]).id;
-        let displays = disp.into_iter().map(|x| (x.id, x)).collect();
+        let displays = Arc::new(RwLock::new(disp.into_iter().map(|x| (x.id, x)).collect()));
+
+        // TODO: set warpzones
 
         Ok(Server {
-            clients: Arc::new(Mutex::new(HashMap::new())),
+            clients: Arc::new(RwLock::new(HashMap::new())),
             displays,
             disp_ids: AssignedDisplays {
                 system,
@@ -49,43 +52,57 @@ impl Server {
         })
     }
 
-    pub fn start(&self, port: u16, client_config: PathBuf) {
+    pub fn start(&self, client_config: PathBuf) {
         // let (tx, rx) = mpsc::channel();
         let clients = self.clients.clone();
+        let displays = self.displays.clone();
 
         thread::spawn(move || {
-            handle_client(port, clients, client_config);
+            handle_client(clients, displays, client_config);
         });
     }
 }
 
-fn handle_client(port: u16, clients: Arc<Mutex<HashMap<Cid, Client>>>, config: PathBuf) -> Result<(), Error> {
-    let tcp = TcpListener::bind(("0.0.0.0", port)).expect("[ERR] TCP binding failed");
+fn handle_client(
+    clients: Arc<RwLock<HashMap<Cid, Client>>>,
+    displays: Arc<RwLock<HashMap<Did, Display>>>,
+    config: PathBuf,
+) -> Result<(), Error> {
+    let tcp = TcpListener::bind(("0.0.0.0", PORT)).expect("[ERR] TCP binding failed");
     let authorized = authorized_clients(config).expect("[ERR] failed to read client config");
 
     for mut stream in tcp.incoming().filter_map(Result::ok) {
         /* read cid from remote client */
-        let mut buffer = [0u8; mem::size_of::<Cid>()];
+        let mut buffer = vec![0u8; mem::size_of::<Cid>()];
         tcp_stream_read!(stream, buffer);
-        let cid = bincode::deserialize(&buffer).unwrap();
-
-        println!("incoming cid: {}", cid);
+        let cid = deserialize(&buffer).unwrap();
 
         /* reject not known client */
         if !authorized.contains(&cid) {
             tcp_stream_write!(stream, 0);
         }
 
-        let client = Client {
-            tcp: stream,
-            cid,
-        };
+        /* transmit display counts to client */
+        tcp_stream_write!(stream, displays.read().unwrap().len() as u32);
 
-        clients.lock().unwrap().insert(cid, client);
+        /* transmit current displays */
+        let disp = displays.read().unwrap();
+        tcp_stream_write!(stream, *disp);
 
-        /* send current displays */
+        /* receive display attach request */
+        tcp_stream_read_resize!(stream, buffer);
+        let client_disp: Vec<Display> = deserialize(&buffer).unwrap();
 
-        /* receive attach request */
+        /* calculate warpzones for new displays */
+        // TODO
+
+        /* transmit ack */
+        tcp_stream_write!(stream, HandshakeStatus::HandshakeOk);
+
+        /* add accepted client */
+        // TODO
+        let client = Client { tcp: stream, cid };
+        clients.write().unwrap().insert(cid, client);
     }
 
     Ok(())

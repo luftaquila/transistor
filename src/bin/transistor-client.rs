@@ -24,7 +24,7 @@ fn main() -> Result<(), Error> {
 
     client.start()?;
 
-    loop { }
+    loop {}
 
     Ok(())
 }
