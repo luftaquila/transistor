@@ -16,9 +16,17 @@ fn main() -> Result<(), Error> {
         ));
     }
 
-    println!("[INF] transistor client startup! server: {}", &args[1]);
+    let server = &args[1];
+
+    println!("[INF] transistor client startup! server: {}", server);
 
     print_displays();
+
+    let mut client = Client::new(server)?;
+
+    client.start();
+
+    loop { }
 
     Ok(())
 }

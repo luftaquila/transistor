@@ -26,15 +26,11 @@ macro_rules! tcp_stream_read {
     ($stream:expr, $buffer:expr) => {
         let mut size = [0u8; 4];
 
-        if let Err(e) = $stream.read_exact(&mut size) {
-            return Err(e.into());
-        }
+        $stream.read_exact(&mut size)?;
 
         let len = u32::from_be_bytes(size) as usize;
 
-        if let Err(e) = $stream.read_exact(&mut $buffer[..len]) {
-            return Err(e.into());
-        }
+        $stream.read_exact(&mut $buffer[..len])?;
     };
 }
 
