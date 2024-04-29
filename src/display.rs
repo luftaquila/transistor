@@ -56,8 +56,8 @@ pub struct Display {
     pub owner: Cid,
 }
 
-impl From<DisplayInfo> for Display {
-    fn from(item: DisplayInfo) -> Self {
+impl Display {
+    pub fn from(item: DisplayInfo, cid: Cid) -> Self {
         Display {
             name: item.name,
             id: rand::random(),
@@ -71,7 +71,56 @@ impl From<DisplayInfo> for Display {
             frequency: item.frequency,
             is_primary: item.is_primary,
             warpzones: Vec::new(),
-            owner: 0,
+            owner: cid,
+        }
+    }
+
+    pub fn is_overlap(&self, target: Display) -> bool {
+        let self_right = self.x + self.width;
+        let self_bottom = self.y + self.height;
+        let target_right = target.x + target.width;
+        let target_bottom = target.y + target.height;
+
+        self.x < target_right
+            && self_right > target.x
+            && self.y < target_bottom
+            && self_bottom > target.y
+    }
+
+    pub fn is_touch(&self, target: Display) -> Option<(i32, i32, ZoneDirection)> {
+        let self_right = self.x + self.width;
+        let self_bottom = self.y + self.height;
+        let target_right = target.x + target.width;
+        let target_bottom = target.y + target.height;
+
+        let horizontal_touch = (self_right == target.x || self.x == target_right)
+            && (self.y < target_bottom && self_bottom > target.y);
+
+        let vertical_touch = (self_bottom == target.y || self.y == target_bottom)
+            && (self.x < target_right && self_right > target.x);
+
+        if horizontal_touch {
+            return Some((
+                i32::max(self.y, target.y),
+                i32::min(self_bottom, target_bottom),
+                if self_right == target.x {
+                    ZoneDirection::HorizontalRight
+                } else {
+                    ZoneDirection::HorizontalLeft
+                },
+            ));
+        } else if vertical_touch {
+            return Some((
+                i32::max(self.x, target.x),
+                i32::min(self_right, target_right),
+                if self_bottom == target.y {
+                    ZoneDirection::VerticalDown
+                } else {
+                    ZoneDirection::VerticalUp
+                },
+            ));
+        } else {
+            None
         }
     }
 }

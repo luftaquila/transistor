@@ -28,7 +28,7 @@ impl Server {
         let disp: Vec<Display> = DisplayInfo::all()
             .expect("[ERR] failed to get system displays")
             .into_iter()
-            .map(Display::from)
+            .map(|x| Display::from(x, SERVER_CID))
             .collect();
 
         if disp.len() == 0 {

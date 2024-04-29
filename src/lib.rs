@@ -9,4 +9,4 @@ pub use server::*;
 pub use utils::*;
 
 pub const PORT: u16 = 2426;
-pub const MAX_DISPLAYS: u32 = 128;
+pub const SERVER_CID: Cid = 0;

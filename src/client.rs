@@ -69,7 +69,7 @@ fn set_display_position(server_disp: Vec<Display>) -> Vec<Display> {
     let system_disp: Vec<Display> = DisplayInfo::all()
         .expect("[ERR] failed to get system displays")
         .into_iter()
-        .map(Display::from)
+        .map(|x| Display::from(x, 0))
         .collect();
 
     // TODO
