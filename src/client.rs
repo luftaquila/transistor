@@ -22,13 +22,21 @@ pub struct AuthorizedClient {
 pub struct Client {
     pub tcp: TcpStream,
     pub cid: Cid,
+    pub displays: Vec<Display>,
 }
 
 impl Client {
     pub fn new(server: &str) -> Result<Client, Error> {
+        let cid = load_or_generate_cid()?;
+
         Ok(Client {
             tcp: TcpStream::connect(server)?,
-            cid: load_or_generate_cid()?,
+            cid,
+            displays: DisplayInfo::all()
+                .expect("[ERR] failed to get system displays")
+                .into_iter()
+                .map(|x| Display::from(x, cid))
+                .collect(),
         })
     }
 
@@ -51,8 +59,8 @@ impl Client {
         let server_disp: Vec<Display> = server_disp_map.values().cloned().collect();
 
         /* configure our displays' attach position */
-        let displays: Vec<Display> = set_display_position(server_disp);
-        tcp_stream_write!(self.tcp, displays);
+        self.set_display_position(server_disp);
+        tcp_stream_write!(self.tcp, self.displays);
 
         /* wait server ack */
         tcp_stream_read!(self.tcp, buffer);
@@ -63,17 +71,12 @@ impl Client {
 
         Ok(())
     }
-}
 
-fn set_display_position(server_disp: Vec<Display>) -> Vec<Display> {
-    let system_disp: Vec<Display> = DisplayInfo::all()
-        .expect("[ERR] failed to get system displays")
-        .into_iter()
-        .map(|x| Display::from(x, 0)) // TODO: set CID
-        .collect();
+    fn set_display_position(&mut self, previous: Vec<Display>) {
+        let mut disp = &self.displays;
 
-    // TODO
-    system_disp
+        // ! TODO
+    }
 }
 
 fn load_or_generate_cid() -> Result<Cid, Error> {

@@ -112,7 +112,11 @@ fn handle_client(
 
         /* add accepted client */
         // TODO
-        let client = Client { tcp: stream, cid };
+        let client = Client {
+            tcp: stream,
+            cid,
+            displays: Vec::new(), // not using at server
+        };
         clients.write().unwrap().insert(cid, client);
     }
 
