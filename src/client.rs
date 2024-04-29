@@ -42,7 +42,7 @@ impl Client {
         let disp_cnt: u32 = deserialize(&buffer).unwrap();
 
         if disp_cnt < 1 {
-            return Err(Error::new(NotConnected, "[ERR] authorization failed"));
+            return Err(Error::new(ConnectionRefused, "[ERR] authorization failed"));
         }
 
         /* receive server's current display configurations */
@@ -58,7 +58,7 @@ impl Client {
         tcp_stream_read!(self.tcp, buffer);
 
         if let HandshakeStatus::HandshakeErr = deserialize(&buffer).unwrap() {
-            return Err(Error::new(InvalidData, "[ERR] attach request rejected"));
+            return Err(Error::new(ConnectionRefused, "[ERR] request rejected"));
         };
 
         Ok(())
@@ -69,7 +69,7 @@ fn set_display_position(server_disp: Vec<Display>) -> Vec<Display> {
     let system_disp: Vec<Display> = DisplayInfo::all()
         .expect("[ERR] failed to get system displays")
         .into_iter()
-        .map(|x| Display::from(x, 0))
+        .map(|x| Display::from(x, 0)) // TODO: set CID
         .collect();
 
     // TODO

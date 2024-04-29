@@ -9,9 +9,8 @@ pub enum HandshakeStatus {
 
 pub fn print_displays() {
     println!("[INF] detected system displays:");
-    let displays = DisplayInfo::all().unwrap();
 
-    for display in displays {
+    for display in DisplayInfo::all().unwrap() {
         println!("  {:?}", display);
     }
 }

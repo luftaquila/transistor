@@ -1,3 +1,5 @@
+use std::io::{Error, ErrorKind::*};
+
 use display_info::DisplayInfo;
 use rand;
 use serde::{Deserialize, Serialize};
@@ -123,4 +125,41 @@ impl Display {
             None
         }
     }
+}
+
+pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) -> Result<(), Error> {
+    for (i, disp) in a.iter_mut().enumerate() {
+        for (j, target) in b.iter_mut().enumerate() {
+            if eq && i >= j {
+                continue;
+            }
+
+            /* check overlapping */
+            if disp.is_overlap(target.clone()) {
+                return Err(Error::new(
+                    InvalidInput,
+                    "[ERR] two displays are overlapping",
+                ));
+            }
+
+            /* add warpzone to each other if touching */
+            if let Some((start, end, direction)) = disp.is_touch(target.clone()) {
+                disp.warpzones.push(WarpZone {
+                    start,
+                    end,
+                    direction,
+                    to: target.owner,
+                });
+
+                target.warpzones.push(WarpZone {
+                    start,
+                    end,
+                    direction: direction.reverse(),
+                    to: disp.owner,
+                });
+            }
+        }
+    }
+
+    Ok(())
 }

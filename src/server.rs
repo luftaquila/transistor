@@ -25,7 +25,7 @@ pub struct Server {
 
 impl Server {
     pub fn new() -> Result<Server, Error> {
-        let disp: Vec<Display> = DisplayInfo::all()
+        let mut disp: Vec<Display> = DisplayInfo::all()
             .expect("[ERR] failed to get system displays")
             .into_iter()
             .map(|x| Display::from(x, SERVER_CID))
@@ -37,9 +37,20 @@ impl Server {
 
         let system = disp.iter().map(|x| x.id).collect();
         let current = disp.iter().find(|x| x.is_primary).unwrap_or(&disp[0]).id;
-        let displays = Arc::new(RwLock::new(disp.into_iter().map(|x| (x.id, x)).collect()));
+        let displays = Arc::new(RwLock::new(
+            disp.iter().map(|x| (x.id, x.clone())).collect(),
+        ));
 
-        // TODO: set warpzones
+        let mut dummy = disp.clone();
+
+        /* create warpzone twice with reverse order to write correctly in disp, not dummy */
+        if let Err(_) = create_warpzones(&mut disp, &mut dummy, true) {
+            return Err(Error::new(InvalidData, "[ERR] system display init failed"));
+        };
+
+        if let Err(_) = create_warpzones(&mut dummy, &mut disp, true) {
+            return Err(Error::new(InvalidData, "[ERR] system display init failed"));
+        };
 
         Ok(Server {
             clients: Arc::new(RwLock::new(HashMap::new())),
