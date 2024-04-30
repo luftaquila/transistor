@@ -71,8 +71,10 @@ impl Server {
         let clients = self.clients.clone();
         let displays = self.displays.clone();
 
+        let authorized = authorized_clients(client_config).expect("[ERR] failed to read client config");
+
         thread::spawn(move || {
-            handle_client(clients, displays, client_config);
+            handle_client(clients, displays, authorized);
         });
     }
 }
@@ -80,10 +82,9 @@ impl Server {
 fn handle_client(
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     displays: Arc<RwLock<HashMap<Did, Display>>>,
-    config: PathBuf,
+    authorized: Vec<Cid>,
 ) -> Result<(), Error> {
     let tcp = TcpListener::bind(("0.0.0.0", PORT)).expect("[ERR] TCP binding failed");
-    let authorized = authorized_clients(config).expect("[ERR] failed to read client config");
 
     for mut stream in tcp.incoming().filter_map(Result::ok) {
         // read cid from remote client
