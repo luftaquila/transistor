@@ -27,6 +27,9 @@ pub struct Client {
 
 impl Client {
     pub fn new(server: &str) -> Result<Client, Error> {
+        // mkdir -p
+        fs::create_dir_all(config_dir!("client"))?;
+
         let cid = load_or_generate_cid()?;
 
         Ok(Client {
@@ -41,7 +44,7 @@ impl Client {
     }
 
     pub fn start(&mut self) -> Result<(), Error> {
-        /* transmit cid to server */
+        // transmit cid to server
         tcp_stream_write!(self.tcp, self.cid);
 
         /* receive display counts; 0 is unauthorized */
@@ -53,12 +56,12 @@ impl Client {
             return Err(Error::new(ConnectionRefused, "[ERR] authorization failed"));
         }
 
-        /* receive server's current display configurations */
+        // receive server's current display configurations
         tcp_stream_read_resize!(self.tcp, buffer);
         let server_disp_map: HashMap<Did, Display> = deserialize(&buffer).unwrap();
         let server_disp: Vec<Display> = server_disp_map.values().cloned().collect();
 
-        /* configure our displays' attach position */
+        // configure our displays' attach position
         self.set_display_position(server_disp);
         tcp_stream_write!(self.tcp, self.displays);
 
@@ -80,7 +83,7 @@ impl Client {
 }
 
 fn load_or_generate_cid() -> Result<Cid, Error> {
-    let cid_file = config_dir!().join("cid");
+    let cid_file = config_dir!("client").join("cid.txt");
 
     if cid_file.exists() {
         let txt = fs::read_to_string(cid_file)?;

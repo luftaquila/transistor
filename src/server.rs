@@ -25,6 +25,9 @@ pub struct Server {
 
 impl Server {
     pub fn new() -> Result<Server, Error> {
+        // mkdir -p
+        fs::create_dir_all(config_dir!("server"))?;
+
         let mut disp: Vec<Display> = DisplayInfo::all()
             .expect("[ERR] failed to get system displays")
             .into_iter()
@@ -83,34 +86,34 @@ fn handle_client(
     let authorized = authorized_clients(config).expect("[ERR] failed to read client config");
 
     for mut stream in tcp.incoming().filter_map(Result::ok) {
-        /* read cid from remote client */
+        // read cid from remote client
         let mut buffer = vec![0u8; mem::size_of::<Cid>()];
         tcp_stream_read!(stream, buffer);
         let cid = deserialize(&buffer).unwrap();
 
-        /* reject not known client */
+        // reject not known client
         if !authorized.contains(&cid) {
             tcp_stream_write!(stream, 0);
         }
 
-        /* transmit display counts to client */
+        // transmit display counts to client
         tcp_stream_write!(stream, displays.read().unwrap().len() as u32);
 
-        /* transmit current displays */
+        // transmit current displays
         let disp = displays.read().unwrap();
         tcp_stream_write!(stream, *disp);
 
-        /* receive display attach request */
+        // receive display attach request
         tcp_stream_read_resize!(stream, buffer);
         let client_disp: Vec<Display> = deserialize(&buffer).unwrap();
 
-        /* calculate warpzones for new displays */
+        // calculate warpzones for new displays
         // TODO
 
-        /* transmit ack */
+        // transmit ack
         tcp_stream_write!(stream, HandshakeStatus::HandshakeOk);
 
-        /* add accepted client */
+        // add accepted client
         // TODO
         let client = Client {
             tcp: stream,

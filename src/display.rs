@@ -134,7 +134,7 @@ pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) ->
                 continue;
             }
 
-            /* check overlapping */
+            // check overlap
             if disp.is_overlap(target.clone()) {
                 return Err(Error::new(
                     InvalidInput,
@@ -142,7 +142,7 @@ pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) ->
                 ));
             }
 
-            /* add warpzone to each other if touching */
+            // add warpzone to each other if touching
             if let Some((start, end, direction)) = disp.is_touch(target.clone()) {
                 disp.warpzones.push(WarpZone {
                     start,

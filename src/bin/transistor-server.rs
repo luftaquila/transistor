@@ -7,7 +7,7 @@ fn main() -> Result<(), Error> {
 
     print_displays();
 
-    let client_config = config_dir!().join("authorized_clients.json");
+    let client_config = config_dir!("server").join("authorized_clients.json");
     let server = Server::new()?;
 
     server.start(client_config);

@@ -17,13 +17,13 @@ pub fn print_displays() {
 
 #[macro_export]
 macro_rules! config_dir {
-    () => {{
+    ($subpath: expr) => {{
         use directories::ProjectDirs;
 
         ProjectDirs::from("", "luftaquila", "transistor")
             .unwrap()
             .data_local_dir()
-            .to_path_buf()
+            .to_path_buf().join($subpath)
     }};
 }
 
@@ -59,7 +59,7 @@ macro_rules! tcp_stream_write {
     ($stream:expr, $data:expr) => {
         let encoded = bincode::serialize(&$data).unwrap();
 
-        /* force 4 byte data length */
+        // force 4 byte data length
         let len = encoded.len() as u32;
         let size = len.to_be_bytes();
 
