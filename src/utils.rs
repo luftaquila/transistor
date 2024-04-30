@@ -1,3 +1,6 @@
+use std::io::stdin;
+use std::io::{Error, ErrorKind::*};
+
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +18,36 @@ pub fn print_displays() {
     }
 }
 
+pub fn stdin_i32() -> Result<i32, Error> {
+    let mut input = String::new();
+
+    if let Err(_) = stdin().read_line(&mut input) {
+        return Err(Error::new(InvalidInput, "stdin read failure"));
+    };
+
+    match input.trim().parse() {
+        Ok(i) => Ok(i),
+        Err(_) => {
+            return Err(Error::new(InvalidInput, "invalid input"));
+        }
+    }
+}
+
+pub fn stdin_char() -> Result<char, Error> {
+    let mut input = String::new();
+
+    if let Err(_) = stdin().read_line(&mut input) {
+        return Err(Error::new(InvalidInput, "stdin read failure"));
+    };
+
+    match input.trim().parse() {
+        Ok(i) => Ok(i),
+        Err(_) => {
+            return Err(Error::new(InvalidInput, "invalid input"));
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! config_dir {
     ($subpath: expr) => {{
@@ -23,7 +56,8 @@ macro_rules! config_dir {
         ProjectDirs::from("", "luftaquila", "transistor")
             .unwrap()
             .data_local_dir()
-            .to_path_buf().join($subpath)
+            .to_path_buf()
+            .join($subpath)
     }};
 }
 
