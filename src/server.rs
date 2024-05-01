@@ -19,7 +19,7 @@ use crate::*;
 pub struct Server {
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     displays: Arc<RwLock<HashMap<Did, Display>>>,
-    disp_ids: AssignedDisplays,
+    disp_ids: Arc<RwLock<AssignedDisplays>>,
     current: Did,
 }
 
@@ -58,10 +58,10 @@ impl Server {
         Ok(Server {
             clients: Arc::new(RwLock::new(HashMap::new())),
             displays,
-            disp_ids: AssignedDisplays {
+            disp_ids: Arc::new(RwLock::new(AssignedDisplays {
                 system,
                 client: Vec::new(),
-            },
+            })),
             current,
         })
     }
@@ -70,18 +70,21 @@ impl Server {
         // let (tx, rx) = mpsc::channel();
         let clients = self.clients.clone();
         let displays = self.displays.clone();
+        let disp_ids = self.disp_ids.clone();
 
-        let authorized = authorized_clients(client_config).expect("[ERR] failed to read client config");
+        let authorized =
+            authorized_clients(client_config).expect("[ERR] failed to read client config");
 
         thread::spawn(move || {
-            handle_client(clients, displays, authorized);
+            handle_client(clients, displays, disp_ids, authorized);
         });
     }
 }
 
 fn handle_client(
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
-    displays: Arc<RwLock<HashMap<Did, Display>>>,
+    mut displays: Arc<RwLock<HashMap<Did, Display>>>,
+    disp_ids: Arc<RwLock<AssignedDisplays>>,
     authorized: Vec<Cid>,
 ) -> Result<(), Error> {
     let tcp = TcpListener::bind(("0.0.0.0", PORT)).expect("[ERR] TCP binding failed");
@@ -101,27 +104,35 @@ fn handle_client(
         tcp_stream_write!(stream, displays.read().unwrap().len() as u32);
 
         // transmit current displays
-        let disp = displays.read().unwrap();
-        tcp_stream_write!(stream, *disp);
+        {
+            let disp = displays.read().unwrap();
+            tcp_stream_write!(stream, *disp);
+        }
 
         // receive display attach request
         tcp_stream_read_resize!(stream, buffer);
-        let client_disp: Vec<Display> = deserialize(&buffer).unwrap();
+        let mut client_disp: Vec<Display> = deserialize(&buffer).unwrap();
 
-        // calculate warpzones for new displays
-        // TODO
-
+        // update warpzones for new displays
+        let new = match create_warpzones_hashmap(&mut displays, &mut client_disp) {
+            Ok(new) => new,
+            Err(_) => {
+                return Err(Error::new(InvalidData, "[ERR] system display init failed"));
+            }
+        };
+         
         // transmit ack
         tcp_stream_write!(stream, HandshakeStatus::HandshakeOk);
 
-        // add accepted client
-        // TODO
+        // add accepted client and display list
         let client = Client {
             tcp: stream,
             cid,
             displays: Vec::new(), // not using at server
         };
+
         clients.write().unwrap().insert(cid, client);
+        disp_ids.write().unwrap().client.extend(new);
     }
 
     Ok(())

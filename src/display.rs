@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind::*};
+use std::sync::{Arc, RwLock};
 
 use display_info::DisplayInfo;
 use rand;
@@ -162,4 +164,55 @@ pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) ->
     }
 
     Ok(())
+}
+
+pub fn create_warpzones_hashmap(
+    map: &mut Arc<RwLock<HashMap<u32, Display>>>,
+    b: &mut Vec<Display>,
+) -> Result<Vec<Did>, Error> {
+    let mut hashmap = map.write().unwrap();
+    let a: Vec<Display> = hashmap.values().cloned().collect();
+
+    let mut new = Vec::new();
+
+    // check overlap first
+    for disp in a.iter() {
+        for target in b.iter() {
+            if disp.is_overlap(target.clone()) {
+                return Err(Error::new(
+                    InvalidInput,
+                    "[ERR] two displays are overlapping",
+                ));
+            }
+        }
+    }
+
+    // add warpzones
+    for disp in a.iter() {
+        for target in b.iter() {
+            if let Some((start, end, direction)) = disp.is_touch(target.clone()) {
+                hashmap.get_mut(&disp.id).unwrap().warpzones.push(WarpZone {
+                    start,
+                    end,
+                    direction,
+                    to: target.owner,
+                });
+
+                let mut target = target.clone();
+                let tid = target.id;
+
+                target.warpzones.push(WarpZone {
+                    start,
+                    end,
+                    direction: direction.reverse(),
+                    to: disp.owner,
+                });
+
+                hashmap.insert(target.id, target);
+                new.push(tid);
+            }
+        }
+    }
+
+    Ok(new)
 }

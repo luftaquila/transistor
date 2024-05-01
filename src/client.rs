@@ -61,7 +61,7 @@ impl Client {
         let server_disp_map: HashMap<Did, Display> = deserialize(&buffer).unwrap();
         let server_disp: Vec<Display> = server_disp_map.values().cloned().collect();
 
-        // configure our displays' attach position
+        // configure our displays' attach position and transmit to server
         self.set_display_position(server_disp);
         tcp_stream_write!(self.tcp, self.displays);
 
