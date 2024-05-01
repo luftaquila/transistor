@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Error, ErrorKind::*, Read, Write};
+use std::io::{Error, ErrorKind::*};
 use std::mem;
 use std::net::TcpListener;
 use std::path::PathBuf;
@@ -86,43 +86,68 @@ fn handle_client(
     mut displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: Arc<RwLock<AssignedDisplays>>,
     authorized: Vec<Cid>,
-) -> Result<(), Error> {
+) {
     let tcp = TcpListener::bind(("0.0.0.0", PORT)).expect("[ERR] TCP binding failed");
 
     for mut stream in tcp.incoming().filter_map(Result::ok) {
+        let ip = stream.peer_addr().unwrap();
+
         // read cid from remote client
         let mut buffer = vec![0u8; mem::size_of::<Cid>()];
-        tcp_stream_read!(stream, buffer);
+
+        if let Err(e) = tcp_read(&mut stream, &mut buffer) {
+            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            continue;
+        };
+
         let cid = deserialize(&buffer).unwrap();
 
-        // reject not known client
+        // reject unknown client
         if !authorized.contains(&cid) {
-            tcp_stream_write!(stream, 0);
+            if let Err(e) = tcp_write(&mut stream, 0) {
+                eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+                continue;
+            };
         }
 
         // transmit display counts to client
-        tcp_stream_write!(stream, displays.read().unwrap().len() as u32);
+        if let Err(e) = tcp_write(&mut stream, displays.read().unwrap().len() as u32) {
+            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            continue;
+        };
 
         // transmit current displays
         {
             let disp = displays.read().unwrap();
-            tcp_stream_write!(stream, *disp);
+
+            if let Err(e) = tcp_write(&mut stream, disp.clone()) {
+                eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+                continue;
+            };
         }
 
         // receive display attach request
-        tcp_stream_read_resize!(stream, buffer);
+        if let Err(e) = tcp_read(&mut stream, &mut buffer) {
+            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            continue;
+        };
+
         let mut client_disp: Vec<Display> = deserialize(&buffer).unwrap();
 
         // update warpzones for new displays
         let new = match create_warpzones_hashmap(&mut displays, &mut client_disp) {
             Ok(new) => new,
-            Err(_) => {
-                return Err(Error::new(InvalidData, "[ERR] system display init failed"));
+            Err(e) => {
+                eprintln!("[ERR] invalid request from client {:?} : {:?}", ip, e);
+                continue;
             }
         };
-         
+
         // transmit ack
-        tcp_stream_write!(stream, HandshakeStatus::HandshakeOk);
+        if let Err(e) = tcp_write(&mut stream, HandshakeStatus::HandshakeOk as i32) {
+            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            continue;
+        };
 
         // add accepted client and display list
         let client = Client {
@@ -133,9 +158,9 @@ fn handle_client(
 
         clients.write().unwrap().insert(cid, client);
         disp_ids.write().unwrap().client.extend(new);
-    }
 
-    Ok(())
+        println!("[INF] client {:?} connected!", ip);
+    }
 }
 
 fn authorized_clients(file: PathBuf) -> Result<Vec<Cid>, Error> {

@@ -140,7 +140,7 @@ pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) ->
             if disp.is_overlap(target.clone()) {
                 return Err(Error::new(
                     InvalidInput,
-                    "[ERR] two displays are overlapping",
+                    "displays are overlapping",
                 ));
             }
 
@@ -175,15 +175,17 @@ pub fn create_warpzones_hashmap(
 
     let mut new = Vec::new();
 
-    // check overlap first
+    // check overlap and isolated displays first
     for disp in a.iter() {
         for target in b.iter() {
             if disp.is_overlap(target.clone()) {
                 return Err(Error::new(
                     InvalidInput,
-                    "[ERR] two displays are overlapping",
+                    "displays are overlapping",
                 ));
             }
+
+            // TODO: verify isolated display
         }
     }
 

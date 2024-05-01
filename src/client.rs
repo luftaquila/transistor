@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::io::{stdout, Error, ErrorKind::*, Read, Write};
-use std::{fs, net::TcpStream};
-use std::{mem, u32};
+use std::fs;
+use std::io::{stdout, Error, ErrorKind::*, Write};
+use std::mem;
+use std::net::TcpStream;
 
 use bincode::deserialize;
 use display_info::DisplayInfo;
@@ -45,32 +46,63 @@ impl Client {
 
     pub fn start(&mut self) -> Result<(), Error> {
         // transmit cid to server
-        tcp_stream_write!(self.tcp, self.cid);
+        if let Err(e) = tcp_write(&mut self.tcp, self.cid) {
+            return Err(Error::new(
+                ConnectionRefused,
+                format!("handshake failed: {:?}", e),
+            ));
+        };
 
         /* receive display counts; 0 is unauthorized */
         let mut buffer = vec![0u8; mem::size_of::<u32>()];
-        tcp_stream_read!(self.tcp, buffer);
+
+        if let Err(e) = tcp_read(&mut self.tcp, &mut buffer) {
+            return Err(Error::new(
+                ConnectionRefused,
+                format!("handshake failed: {:?}", e),
+            ));
+        };
+
         let disp_cnt: u32 = deserialize(&buffer).unwrap();
 
         if disp_cnt < 1 {
-            return Err(Error::new(ConnectionRefused, "[ERR] authorization failed"));
+            return Err(Error::new(ConnectionRefused, "authorization failed"));
         }
 
         // receive server's current display configurations
-        tcp_stream_read_resize!(self.tcp, buffer);
+        if let Err(e) = tcp_read(&mut self.tcp, &mut buffer) {
+            return Err(Error::new(
+                ConnectionRefused,
+                format!("handshake failed: {:?}", e),
+            ));
+        };
+
         let server_disp_map: HashMap<Did, Display> = deserialize(&buffer).unwrap();
         let server_disp: Vec<Display> = server_disp_map.values().cloned().collect();
 
-        // configure our displays' attach position and transmit to server
+        /* configure our displays' attach position and transmit to server */
         self.set_display_position(server_disp);
-        tcp_stream_write!(self.tcp, self.displays);
+
+        if let Err(e) = tcp_write(&mut self.tcp, self.displays.clone()) {
+            return Err(Error::new(
+                ConnectionRefused,
+                format!("handshake failed: {:?}", e),
+            ));
+        };
 
         /* wait server ack */
-        tcp_stream_read!(self.tcp, buffer);
+        if let Err(e) = tcp_read(&mut self.tcp, &mut buffer) {
+            return Err(Error::new(
+                ConnectionRefused,
+                format!("handshake failed: {:?}", e),
+            ));
+        };
 
         if let HandshakeStatus::HandshakeErr = deserialize(&buffer).unwrap() {
             return Err(Error::new(ConnectionRefused, "[ERR] request rejected"));
         };
+
+        println!("[INF] connected!");
 
         Ok(())
     }
@@ -132,8 +164,24 @@ impl Client {
     }
 }
 
+fn load_or_generate_cid() -> Result<Cid, Error> {
+    let cid_file = config_dir!("client").join("cid.txt");
+
+    if cid_file.exists() {
+        let txt = fs::read_to_string(cid_file)?;
+        Ok(txt.parse().expect("[ERR] failed to load cid"))
+    } else {
+        let cid: Cid = rand::random();
+
+        let mut file = fs::File::create(&cid_file)?;
+        file.write_all(cid.to_string().as_bytes())?;
+
+        Ok(cid)
+    }
+}
+
 fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display>) {
-    println!("\n########## display position setup ##########");
+    println!("########## display setup ##########");
     println!("[INF] current server displays:");
 
     for (i, d) in server_conf.iter().enumerate() {
@@ -143,7 +191,7 @@ fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display
         );
     }
 
-    println!("\n[INF] please enter the attach position of the each display");
+    println!("[INF] please enter the attach position of the each display");
     println!("[INF] (x, y) is the coordinate of the upper left corner of the display");
 
     let mut i = 0;
@@ -213,20 +261,6 @@ fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display
             }
         }
     }
-}
 
-fn load_or_generate_cid() -> Result<Cid, Error> {
-    let cid_file = config_dir!("client").join("cid.txt");
-
-    if cid_file.exists() {
-        let txt = fs::read_to_string(cid_file)?;
-        Ok(txt.parse().expect("[ERR] failed to load cid"))
-    } else {
-        let cid: Cid = rand::random();
-
-        let mut file = fs::File::create(&cid_file)?;
-        file.write_all(cid.to_string().as_bytes())?;
-
-        Ok(cid)
-    }
+    // TODO: ask write config to file
 }

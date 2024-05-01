@@ -12,8 +12,6 @@ fn main() -> Result<(), Error> {
 
     server.start(client_config);
 
-    println!("{:?}", server);
-
     loop {}
 
     Ok(())

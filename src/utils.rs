@@ -1,5 +1,5 @@
-use std::io::stdin;
-use std::io::{Error, ErrorKind::*};
+use std::io::{stdin, Error, ErrorKind::*, Read, Write};
+use std::net::TcpStream;
 
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,8 @@ pub fn print_displays() {
     for display in DisplayInfo::all().unwrap() {
         println!("  {:?}", display);
     }
+
+    println!();
 }
 
 pub fn stdin_i32() -> Result<i32, Error> {
@@ -48,6 +50,29 @@ pub fn stdin_char() -> Result<char, Error> {
     }
 }
 
+pub fn tcp_read(stream: &mut TcpStream, buffer: &mut Vec<u8>) -> Result<usize, Error> {
+    let mut size = [0u8; 4];
+    stream.read_exact(&mut size)?;
+
+    let len = u32::from_be_bytes(size) as usize;
+    buffer.resize(len, 0);
+
+    stream.read_exact(buffer)?;
+
+    Ok(len)
+}
+
+pub fn tcp_write<T: Serialize>(stream: &mut TcpStream, data: T) -> Result<usize, Error> {
+    let encoded = bincode::serialize(&data).unwrap();
+    let len = encoded.len();
+    let size = (len as u32).to_be_bytes(); // force 4 byte data length
+
+    stream.write_all(&size)?;
+    stream.write_all(&encoded)?;
+
+    Ok(len)
+}
+
 #[macro_export]
 macro_rules! config_dir {
     ($subpath: expr) => {{
@@ -61,48 +86,3 @@ macro_rules! config_dir {
     }};
 }
 
-#[macro_export]
-macro_rules! tcp_stream_read {
-    ($stream:expr, $buffer:expr) => {{
-        let mut size = [0u8; 4];
-        $stream.read_exact(&mut size)?;
-
-        let len = u32::from_be_bytes(size) as usize;
-        $stream.read_exact(&mut $buffer[..len])?;
-
-        len
-    }};
-}
-
-#[macro_export]
-macro_rules! tcp_stream_read_resize {
-    ($stream:expr, $buffer:expr) => {{
-        let mut size = [0u8; 4];
-        $stream.read_exact(&mut size)?;
-
-        let len = u32::from_be_bytes(size) as usize;
-        $buffer.resize(len, 0);
-        $stream.read_exact(&mut $buffer)?;
-
-        len
-    }};
-}
-
-#[macro_export]
-macro_rules! tcp_stream_write {
-    ($stream:expr, $data:expr) => {
-        let encoded = bincode::serialize(&$data).unwrap();
-
-        // force 4 byte data length
-        let len = encoded.len() as u32;
-        let size = len.to_be_bytes();
-
-        if let Err(e) = $stream.write_all(&size) {
-            eprintln!("[ERR] TCP stream write failed: {}", e);
-        }
-
-        if let Err(e) = $stream.write_all(&encoded) {
-            eprintln!("[ERR] TCP stream write failed: {}", e);
-        }
-    };
-}
