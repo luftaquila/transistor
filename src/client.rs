@@ -262,5 +262,48 @@ fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display
         }
     }
 
-    // TODO: ask write config to file
+    loop {
+        print!("[INF] save current config? [y/n]: ");
+        stdout().flush().unwrap();
+
+        let ch = match stdin_char() {
+            Ok(ch) => ch,
+            Err(_) => {
+                continue;
+            }
+        };
+
+        match ch {
+            'y' => {
+                let path = config_dir!("client").join("client_config.json");
+                let path_str = path.as_os_str().to_str().unwrap();
+
+                let mut file = match fs::File::create(&path) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        eprintln!("[ERR] failed to create {:?}: {:?}", path_str, e);
+                        break;
+                    }
+                };
+
+                match serde_json::to_string_pretty(&displays) {
+                    Ok(json) => {
+                        if let Err(e) = file.write_all(json.as_bytes()) {
+                            eprintln!("[ERR] failed to write to {:?}: {:?}", path_str, e);
+                        }
+
+                        println!("[INF] config saved at {:?}", path_str);
+                    }
+                    Err(e) => eprintln!("[ERR] failed to save config into file: {:?}", e),
+                }
+                break;
+            }
+            'n' => {
+                break;
+            }
+            _ => {
+                continue;
+            }
+        }
+    }
 }
