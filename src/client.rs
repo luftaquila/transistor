@@ -33,14 +33,20 @@ impl Client {
 
         let cid = load_or_generate_cid()?;
 
+        let mut displays: Vec<Display> = DisplayInfo::all()
+            .expect("[ERR] failed to get system displays")
+            .into_iter()
+            .map(|x| Display::from(x, cid, display_scale))
+            .collect();
+
+        for disp in displays.iter_mut() {
+            disp.id += 1;
+        }
+
         Ok(Client {
             tcp: TcpStream::connect(server)?,
             cid,
-            displays: DisplayInfo::all()
-                .expect("[ERR] failed to get system displays")
-                .into_iter()
-                .map(|x| Display::from(x, cid, display_scale))
-                .collect(),
+            displays,
         })
     }
 
