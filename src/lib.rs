@@ -10,3 +10,4 @@ pub use utils::*;
 
 pub const PORT: u16 = 2426;
 pub const SERVER_CID: Cid = 0;
+pub const MARGIN: i32 = 2;

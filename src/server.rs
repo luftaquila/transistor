@@ -20,7 +20,7 @@ pub struct Server {
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: Arc<RwLock<AssignedDisplays>>,
-    current: Did,
+    current: Arc<RwLock<Did>>,
 }
 
 impl Server {
@@ -39,7 +39,9 @@ impl Server {
         }
 
         let system = disp.iter().map(|x| x.id).collect();
-        let current = disp.iter().find(|x| x.is_primary).unwrap_or(&disp[0]).id;
+        let current = Arc::new(RwLock::new(
+            disp.iter().find(|x| x.is_primary).unwrap_or(&disp[0]).id,
+        ));
         let displays = Arc::new(RwLock::new(
             disp.iter().map(|x| (x.id, x.clone())).collect(),
         ));
@@ -79,16 +81,95 @@ impl Server {
             handle_client(clients, displays, disp_ids, authorized);
         });
 
-        // TODO: listen event
         let mut mouce = Mouse::new();
-        let hook = mouce.hook(Box::new(|e| {
+
+        /* find out the current display */
+        let disp_ids = self.disp_ids.clone();
+        let displays = self.displays.clone();
+        let (x, y) = mouce
+            .get_position()
+            .expect("[ERR] cannot get cursor position");
+
+        {
+            let display_map = displays.read().unwrap();
+
+            for disp in disp_ids.read().unwrap().system.iter() {
+                let d = display_map.get(disp).unwrap();
+
+                if x > d.x && x < (d.x + d.width) && y > d.y && y < (d.y + d.height) {
+                    *self.current.write().unwrap() = d.id;
+                    break;
+                }
+            }
+        }
+
+        /* listen mouse events */
+        let current = self.current.clone();
+
+        let hook = mouce.hook(Box::new(move |e| {
+            /* check if we are in warpzone */
+            let mut cur_id = current.write().unwrap();
+            let disps = displays.read().unwrap();
+            let cur = disps.get(&*cur_id).unwrap();
+
+            let mut warp_point: Option<(i32, i32)> = None;
+
+            for wz in cur.warpzones.iter() {
+                match wz.direction {
+                    ZoneDirection::HorizontalLeft => {
+                        if y >= wz.start - MARGIN && y <= wz.end + MARGIN && x <= cur.x + MARGIN {
+                            *cur_id = wz.to;
+                            let to = disps.get(&*cur_id).unwrap();
+                            warp_point = Some((x - to.x, y - to.y));
+                            break;
+                        }
+                    }
+                    ZoneDirection::HorizontalRight => {
+                        if y >= wz.start - MARGIN
+                            && y <= wz.end + MARGIN
+                            && x >= (cur.x + cur.width as i32) - MARGIN
+                        {
+                            *cur_id = wz.to;
+                            let to = disps.get(&*cur_id).unwrap();
+                            warp_point = Some((x - to.x, y - to.y));
+                            break;
+                        }
+                    }
+                    ZoneDirection::VerticalUp => {
+                        if x >= wz.start - MARGIN && x <= wz.end + MARGIN && y <= cur.y + MARGIN {
+                            *cur_id = wz.to;
+                            let to = disps.get(&*cur_id).unwrap();
+                            warp_point = Some((x - to.x, y - to.y));
+                            break;
+                        }
+                    }
+                    ZoneDirection::VerticalDown => {
+                        if x >= wz.start - MARGIN
+                            && x <= wz.end + MARGIN
+                            && y >= (cur.y + cur.height as i32) - MARGIN
+                        {
+                            *cur_id = wz.to;
+                            let to = disps.get(&*cur_id).unwrap();
+                            warp_point = Some((x - to.x, y - to.y));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // no go
+            if warp_point.is_none() {
+                return;
+            }
+
+            /* warp sequence begin */
             println!("{:?}", e);
         }));
 
         match hook {
             Ok(id) => {
                 println!("hook: {}", id);
-            },
+            }
             Err(e) => {
                 eprintln!("[ERR] event hook failed: {:?}", e);
             }
