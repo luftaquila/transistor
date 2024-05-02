@@ -281,7 +281,7 @@ fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display
                 let mut file = match fs::File::create(&path) {
                     Ok(file) => file,
                     Err(e) => {
-                        eprintln!("[ERR] failed to create {:?}: {:?}", path_str, e);
+                        eprintln!("[ERR] failed to create {}: {}", path_str, e);
                         break;
                     }
                 };
@@ -289,12 +289,12 @@ fn prompt_display_position(displays: &mut Vec<Display>, server_conf: Vec<Display
                 match serde_json::to_string_pretty(&displays) {
                     Ok(json) => {
                         if let Err(e) = file.write_all(json.as_bytes()) {
-                            eprintln!("[ERR] failed to write to {:?}: {:?}", path_str, e);
+                            eprintln!("[ERR] failed to write to {}: {}", path_str, e);
                         }
 
-                        println!("[INF] config saved at {:?}", path_str);
+                        println!("[INF] config saved at {}", path_str);
                     }
-                    Err(e) => eprintln!("[ERR] failed to save config into file: {:?}", e),
+                    Err(e) => eprintln!("[ERR] failed to save config into file: {}", e),
                 }
                 break;
             }

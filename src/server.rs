@@ -189,20 +189,21 @@ impl Server {
             let (x, y) = warp_point.unwrap();
 
             // transmit warp point
-            tx.send(Message {
+            if let Err(e) = tx.send(Message {
                 disp: *cur_id,
                 action: Action::Warp,
                 x,
                 y,
-            })
-            .unwrap();
+            }) {
+                eprintln!("[ERR] mpsc tx failed: {}", e);
+            }
 
             // warp
             // TODO: winit
         }));
 
         if let Err(e) = hook {
-            eprintln!("[ERR] event hook failed: {:?}", e);
+            eprintln!("[ERR] event hook failed: {}", e);
         }
     }
 }
@@ -236,7 +237,7 @@ fn handle_client(
         let mut buffer = vec![0u8; mem::size_of::<Cid>()];
 
         if let Err(e) = tcp_read(&mut stream, &mut buffer) {
-            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            eprintln!("[ERR] client {} handshake failed: {}", ip, e);
             continue;
         };
 
@@ -245,14 +246,14 @@ fn handle_client(
         // reject unknown client
         if !authorized.contains(&cid) {
             if let Err(e) = tcp_write(&mut stream, 0) {
-                eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+                eprintln!("[ERR] client {} handshake failed: {}", ip, e);
                 continue;
             };
         }
 
         // transmit display counts to client
         if let Err(e) = tcp_write(&mut stream, displays.read().unwrap().len() as u32) {
-            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            eprintln!("[ERR] client {} handshake failed: {}", ip, e);
             continue;
         };
 
@@ -261,14 +262,14 @@ fn handle_client(
             let disp = displays.read().unwrap();
 
             if let Err(e) = tcp_write(&mut stream, disp.clone()) {
-                eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+                eprintln!("[ERR] client {} handshake failed: {}", ip, e);
                 continue;
             };
         }
 
         // receive display attach request
         if let Err(e) = tcp_read(&mut stream, &mut buffer) {
-            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            eprintln!("[ERR] client {} handshake failed: {}", ip, e);
             continue;
         };
 
@@ -278,14 +279,14 @@ fn handle_client(
         let new = match create_warpzones_hashmap(&mut displays, &mut client_disp) {
             Ok(new) => new,
             Err(e) => {
-                eprintln!("[ERR] invalid request from client {:?} : {:?}", ip, e);
+                eprintln!("[ERR] invalid request from client {} : {}", ip, e);
                 continue;
             }
         };
 
         // transmit ack
         if let Err(e) = tcp_write(&mut stream, HandshakeStatus::HandshakeOk as i32) {
-            eprintln!("[ERR] client {:?} handshake failed: {:?}", ip, e);
+            eprintln!("[ERR] client {} handshake failed: {}", ip, e);
             continue;
         };
 
@@ -299,7 +300,7 @@ fn handle_client(
         clients.write().unwrap().insert(cid, client);
         disp_ids.write().unwrap().client.extend(new);
 
-        println!("[INF] client {:?} connected!", ip);
+        println!("[INF] client {} connected!", ip);
     }
 }
 
