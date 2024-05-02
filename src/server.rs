@@ -4,16 +4,32 @@ use std::io::{Error, ErrorKind::*};
 use std::mem;
 use std::net::TcpListener;
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
 use bincode::deserialize;
 use display_info::DisplayInfo;
+use mouce::common::MouseEvent;
 use mouce::Mouse;
 
 use crate::client::*;
 use crate::display::*;
 use crate::*;
+
+#[derive(Debug)]
+enum Action {
+    Warp,
+    Move,
+}
+
+#[derive(Debug)]
+struct Message {
+    disp: Did,
+    action: Action,
+    x: i32,
+    y: i32,
+}
 
 #[derive(Debug)]
 pub struct Server {
@@ -68,17 +84,18 @@ impl Server {
         })
     }
 
-    pub fn start(&self, client_config: PathBuf) {
-        // let (tx, rx) = mpsc::channel();
+    pub fn start(&self, authorized: PathBuf) {
+        /* message exchange channels */
+        let (tx, rx1) = mpsc::channel::<Message>();
+        let (tx1, rx) = mpsc::channel::<Message>();
+
         let clients = self.clients.clone();
         let displays = self.displays.clone();
         let disp_ids = self.disp_ids.clone();
 
-        let authorized =
-            authorized_clients(client_config).expect("[ERR] failed to read client config");
-
+        /* spawn tcp handler thread */
         thread::spawn(move || {
-            handle_client(clients, displays, disp_ids, authorized);
+            handle_client(clients, displays, disp_ids, authorized, tx1, rx1);
         });
 
         let mut mouce = Mouse::new();
@@ -107,6 +124,12 @@ impl Server {
         let current = self.current.clone();
 
         let hook = mouce.hook(Box::new(move |e| {
+            let (x, y) = if let MouseEvent::AbsoluteMove(x, y) = e {
+                (*x, *y)
+            } else {
+                return;
+            };
+
             /* check if we are in warpzone */
             let mut cur_id = current.write().unwrap();
             let disps = displays.read().unwrap();
@@ -163,16 +186,23 @@ impl Server {
             }
 
             /* warp sequence begin */
-            println!("{:?}", e);
+            let (x, y) = warp_point.unwrap();
+
+            // transmit warp point
+            tx.send(Message {
+                disp: *cur_id,
+                action: Action::Warp,
+                x,
+                y,
+            })
+            .unwrap();
+
+            // warp
+            // TODO: winit
         }));
 
-        match hook {
-            Ok(id) => {
-                println!("hook: {}", id);
-            }
-            Err(e) => {
-                eprintln!("[ERR] event hook failed: {:?}", e);
-            }
+        if let Err(e) = hook {
+            eprintln!("[ERR] event hook failed: {:?}", e);
         }
     }
 }
@@ -181,14 +211,28 @@ fn handle_client(
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     mut displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: Arc<RwLock<AssignedDisplays>>,
-    authorized: Vec<Cid>,
+    authorized: PathBuf,
+    tx: Sender<Message>,
+    rx: Receiver<Message>,
 ) {
+    /* spawn transceiver thread */
+    let client_list = clients.clone();
+
+    thread::spawn(move || {
+        transceive(client_list, tx, rx);
+    });
+
+    /* get authorized client list */
+    let authorized =
+        get_authorized_clients(authorized).expect("[ERR] failed to read client config");
+
     let tcp = TcpListener::bind(("0.0.0.0", PORT)).expect("[ERR] TCP binding failed");
 
+    /* start handshaking with client */
     for mut stream in tcp.incoming().filter_map(Result::ok) {
         let ip = stream.peer_addr().unwrap();
 
-        // read cid from remote client
+        /* read cid from remote client */
         let mut buffer = vec![0u8; mem::size_of::<Cid>()];
 
         if let Err(e) = tcp_read(&mut stream, &mut buffer) {
@@ -259,7 +303,22 @@ fn handle_client(
     }
 }
 
-fn authorized_clients(file: PathBuf) -> Result<Vec<Cid>, Error> {
+fn transceive(
+    clients: Arc<RwLock<HashMap<Cid, Client>>>,
+    tx: Sender<Message>,
+    rx: Receiver<Message>,
+) {
+    match rx.recv() {
+        Ok(msg) => {
+            println!("msg: {:?}", msg);
+        }
+        Err(e) => {
+            eprintln!("[ERR] message receive failed: {}", e);
+        }
+    }
+}
+
+fn get_authorized_clients(file: PathBuf) -> Result<Vec<Cid>, Error> {
     if !file.exists() {
         return Err(Error::new(
             NotFound,
