@@ -34,7 +34,7 @@ pub struct WarpZone {
     pub start: i32,
     pub end: i32,
     pub direction: ZoneDirection,
-    pub to: Cid,
+    pub to: Did,
 }
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl Display {
     pub fn from(item: DisplayInfo, cid: Cid) -> Self {
         Display {
             name: item.name,
-            id: rand::random(),
+            id: item.id,
             // raw_handle - cannot serialize
             x: item.x,
             y: item.y,
@@ -150,14 +150,14 @@ pub fn create_warpzones(a: &mut Vec<Display>, b: &mut Vec<Display>, eq: bool) ->
                     start,
                     end,
                     direction,
-                    to: target.owner,
+                    to: target.id,
                 });
 
                 target.warpzones.push(WarpZone {
                     start,
                     end,
                     direction: direction.reverse(),
-                    to: disp.owner,
+                    to: disp.id,
                 });
             }
         }
@@ -178,6 +178,13 @@ pub fn create_warpzones_hashmap(
     // check overlap and isolated displays first
     for disp in a.iter() {
         for target in b.iter() {
+            if disp.id == target.id {
+                return Err(Error::new(
+                    InvalidInput,
+                    "display ids are not identical",
+                ));
+            }
+
             if disp.is_overlap(target.clone()) {
                 return Err(Error::new(
                     InvalidInput,
@@ -197,7 +204,7 @@ pub fn create_warpzones_hashmap(
                     start,
                     end,
                     direction,
-                    to: target.owner,
+                    to: target.id,
                 });
 
                 let mut target = target.clone();
@@ -207,7 +214,7 @@ pub fn create_warpzones_hashmap(
                     start,
                     end,
                     direction: direction.reverse(),
-                    to: disp.owner,
+                    to: disp.id,
                 });
 
                 hashmap.insert(target.id, target);
