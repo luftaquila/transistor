@@ -78,6 +78,21 @@ impl Server {
         thread::spawn(move || {
             handle_client(clients, displays, disp_ids, authorized);
         });
+
+        // TODO: listen event
+        let mut mouce = Mouse::new();
+        let hook = mouce.hook(Box::new(|e| {
+            println!("{:?}", e);
+        }));
+
+        match hook {
+            Ok(id) => {
+                println!("hook: {}", id);
+            },
+            Err(e) => {
+                eprintln!("[ERR] event hook failed: {:?}", e);
+            }
+        }
     }
 }
 
