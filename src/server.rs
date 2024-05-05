@@ -4,8 +4,10 @@ use std::io::{Error, ErrorKind::*};
 use std::mem;
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{
+    mpsc::{channel, Receiver, Sender, TryRecvError},
+    Arc, RwLock,
+};
 use std::thread;
 
 use bincode::deserialize;
@@ -36,7 +38,8 @@ pub struct Server {
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: Arc<RwLock<AssignedDisplays>>,
-    current: Arc<RwLock<Did>>,
+    focus: Arc<RwLock<Did>>,
+    current: Arc<RwLock<Cid>>,
 }
 
 impl Server {
@@ -55,7 +58,7 @@ impl Server {
         }
 
         let system = disp.iter().map(|x| x.id).collect();
-        let current = Arc::new(RwLock::new(
+        let focus = Arc::new(RwLock::new(
             disp.iter().find(|x| x.is_primary).unwrap_or(&disp[0]).id,
         ));
         let displays = Arc::new(RwLock::new(
@@ -80,22 +83,24 @@ impl Server {
                 system,
                 client: Vec::new(),
             })),
-            current,
+            focus,
+            current: Arc::new(RwLock::new(SERVER_CID)),
         })
     }
 
     pub fn start(&self, authorized: PathBuf) {
         /* message exchange channels */
-        let (tx, rx1) = mpsc::channel::<Message>();
-        let (tx1, rx) = mpsc::channel::<Message>();
+        let (tx, rx1) = channel::<Message>();
+        let (tx1, rx) = channel::<Message>();
 
+        let current = self.current.clone();
         let clients = self.clients.clone();
         let displays = self.displays.clone();
         let disp_ids = self.disp_ids.clone();
 
         /* spawn tcp handler thread */
         thread::spawn(move || {
-            handle_client(clients, displays, disp_ids, authorized, tx1, rx1);
+            handle_client(current, clients, displays, disp_ids, authorized, tx1, rx1);
         });
 
         let mut mouce = Mouse::new();
@@ -114,13 +119,14 @@ impl Server {
                 let d = display_map.get(disp).unwrap();
 
                 if x > d.x && x < (d.x + d.width) && y > d.y && y < (d.y + d.height) {
-                    *self.current.write().unwrap() = d.id;
+                    *self.focus.write().unwrap() = d.id;
                     break;
                 }
             }
         }
 
         /* listen mouse events */
+        let focus = self.focus.clone();
         let current = self.current.clone();
 
         let hook = mouce.hook(Box::new(move |e| {
@@ -131,9 +137,11 @@ impl Server {
             };
 
             /* check if we are in warpzone */
-            let mut cur_id = current.write().unwrap();
+            let mut cur_did = focus.write().unwrap();
+            let mut current = current.write().unwrap();
+
             let disps = displays.read().unwrap();
-            let cur = disps.get(&*cur_id).unwrap();
+            let cur = disps.get(&*cur_did).unwrap();
 
             let mut warp_point: Option<(i32, i32)> = None;
 
@@ -141,8 +149,9 @@ impl Server {
                 match wz.direction {
                     ZoneDirection::HorizontalLeft => {
                         if y >= wz.start - MARGIN && y <= wz.end + MARGIN && x <= cur.x + MARGIN {
-                            *cur_id = wz.to;
-                            let to = disps.get(&*cur_id).unwrap();
+                            *cur_did = wz.to;
+                            let to = disps.get(&*cur_did).unwrap();
+                            *current = to.owner;
                             warp_point = Some((x - to.x, y - to.y));
                             break;
                         }
@@ -152,16 +161,18 @@ impl Server {
                             && y <= wz.end + MARGIN
                             && x >= (cur.x + cur.width as i32) - MARGIN
                         {
-                            *cur_id = wz.to;
-                            let to = disps.get(&*cur_id).unwrap();
+                            *cur_did = wz.to;
+                            let to = disps.get(&*cur_did).unwrap();
+                            *current = to.owner;
                             warp_point = Some((x - to.x, y - to.y));
                             break;
                         }
                     }
                     ZoneDirection::VerticalUp => {
                         if x >= wz.start - MARGIN && x <= wz.end + MARGIN && y <= cur.y + MARGIN {
-                            *cur_id = wz.to;
-                            let to = disps.get(&*cur_id).unwrap();
+                            *cur_did = wz.to;
+                            let to = disps.get(&*cur_did).unwrap();
+                            *current = to.owner;
                             warp_point = Some((x - to.x, y - to.y));
                             break;
                         }
@@ -171,8 +182,9 @@ impl Server {
                             && x <= wz.end + MARGIN
                             && y >= (cur.y + cur.height as i32) - MARGIN
                         {
-                            *cur_id = wz.to;
-                            let to = disps.get(&*cur_id).unwrap();
+                            *cur_did = wz.to;
+                            let to = disps.get(&*cur_did).unwrap();
+                            *current = to.owner;
                             warp_point = Some((x - to.x, y - to.y));
                             break;
                         }
@@ -190,7 +202,7 @@ impl Server {
 
             // transmit warp point
             if let Err(e) = tx.send(Message {
-                disp: *cur_id,
+                disp: *cur_did,
                 action: Action::Warp,
                 x,
                 y,
@@ -209,6 +221,7 @@ impl Server {
 }
 
 fn handle_client(
+    current: Arc<RwLock<Cid>>,
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     mut displays: Arc<RwLock<HashMap<Did, Display>>>,
     disp_ids: Arc<RwLock<AssignedDisplays>>,
@@ -220,7 +233,7 @@ fn handle_client(
     let client_list = clients.clone();
 
     thread::spawn(move || {
-        transceive(client_list, tx, rx);
+        transceive(current, client_list, tx, rx);
     });
 
     /* get authorized client list */
@@ -305,6 +318,7 @@ fn handle_client(
 }
 
 fn transceive(
+    current: Arc<RwLock<Cid>>,
     clients: Arc<RwLock<HashMap<Cid, Client>>>,
     tx: Sender<Message>,
     rx: Receiver<Message>,

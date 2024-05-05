@@ -3,7 +3,6 @@ use std::io::{Error, ErrorKind::*};
 use std::sync::{Arc, RwLock};
 
 use display_info::DisplayInfo;
-use rand;
 use serde::{Deserialize, Serialize};
 
 use crate::Cid;
