@@ -303,6 +303,11 @@ fn handle_client(
             continue;
         };
 
+        // set stream in nonblocking mode
+        stream
+            .set_nonblocking(true)
+            .expect("[ERR] set stream nonblocking failed");
+
         // add accepted client and display list
         let client = Client {
             tcp: stream,
@@ -323,25 +328,58 @@ fn transceive(
     tx: Sender<Message>,
     rx: Receiver<Message>,
 ) {
-    match rx.recv() {
-        Ok(msg) => {
-            println!("msg: {:?}", msg);
+    let mut buffer = vec![0u8; 128];
+
+    loop {
+        let mut clients = clients.write().unwrap();
+        let cid = current.read().unwrap();
+
+        if *cid == 0 {
+            continue;
         }
-        Err(e) => {
-            eprintln!("[ERR] message receive failed: {}", e);
+
+        let cur = clients.get_mut(&cid).unwrap();
+
+        // check if there is something to transmit
+        match rx.try_recv() {
+            Ok(msg) => {
+                println!("msg: {:?}", msg);
+                // TODO: transmit
+            }
+            Err(TryRecvError::Empty) => {
+                // do nothing
+            }
+            Err(e) => {
+                eprintln!("[ERR] message receive failed: {}", e);
+            }
+        }
+
+        // check if cursor warped back
+        if let Err(e) = tcp_read(&mut cur.tcp, &mut buffer) {
+            if e.kind() == WouldBlock {
+                continue;
+            }
+            println!("tcperr: {:?}", e);
+
+            continue;
         }
     }
 }
 
 fn get_authorized_clients(file: PathBuf) -> Result<Vec<Cid>, Error> {
     if !file.exists() {
-        return Err(Error::new(
-            NotFound,
-            format!("{} not found", file.as_os_str().to_str().unwrap()),
-        ));
+        fs::File::create(&file)?; // touch authorized_clients.json
     }
 
     let json = fs::read_to_string(&file)?;
+
+    if json.len() == 0 {
+        return Err(Error::new(
+            NotFound,
+            format!("client config is empty: {}", file.as_os_str().to_str().unwrap()),
+        ));
+    }
+
     let clients: Vec<AuthorizedClient> = serde_json::from_str(&json)?;
     let clients_cid = clients.iter().map(|x| x.cid).collect();
 
