@@ -19,7 +19,7 @@ fn main() -> Result<(), Error> {
     println!("[INF] transistor client startup! server: {}", server);
     print_displays();
 
-    let mut client = Client::new(server)?;
+    let mut client = Client::new(server, 1.0)?;
     client.start()?;
 
     loop {}

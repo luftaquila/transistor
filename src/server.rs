@@ -43,14 +43,14 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new() -> Result<Server, Error> {
+    pub fn new(display_scale: f32) -> Result<Server, Error> {
         // mkdir -p
         fs::create_dir_all(config_dir!("server"))?;
 
         let mut disp: Vec<Display> = DisplayInfo::all()
             .expect("[ERR] failed to get system displays")
             .into_iter()
-            .map(|x| Display::from(x, SERVER_CID))
+            .map(|x| Display::from(x, SERVER_CID, display_scale))
             .collect();
 
         if disp.len() == 0 {

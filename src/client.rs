@@ -27,7 +27,7 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(server: &str) -> Result<Client, Error> {
+    pub fn new(server: &str, display_scale: f32) -> Result<Client, Error> {
         // mkdir -p
         fs::create_dir_all(config_dir!("client"))?;
 
@@ -39,7 +39,7 @@ impl Client {
             displays: DisplayInfo::all()
                 .expect("[ERR] failed to get system displays")
                 .into_iter()
-                .map(|x| Display::from(x, cid))
+                .map(|x| Display::from(x, cid, display_scale))
                 .collect(),
         })
     }

@@ -60,7 +60,7 @@ pub struct Display {
 }
 
 impl Display {
-    pub fn from(item: DisplayInfo, cid: Cid) -> Self {
+    pub fn from(item: DisplayInfo, cid: Cid, display_scale: f32) -> Self {
         Display {
             name: item.name,
             id: item.id,
@@ -70,7 +70,7 @@ impl Display {
             width: item.width as i32,
             height: item.height as i32,
             rotation: item.rotation,
-            scale_factor: item.scale_factor,
+            scale_factor: display_scale,
             frequency: item.frequency,
             is_primary: item.is_primary,
             warpzones: Vec::new(),
