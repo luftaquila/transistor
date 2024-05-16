@@ -16,22 +16,9 @@ use mouce::common::MouseEvent;
 use mouce::Mouse;
 
 use crate::client::*;
+use crate::comm::*;
 use crate::display::*;
 use crate::*;
-
-#[derive(Debug)]
-enum Action {
-    Warp,
-    Move,
-}
-
-#[derive(Debug)]
-struct Message {
-    disp: Did,
-    action: Action,
-    x: i32,
-    y: i32,
-}
 
 #[derive(Debug)]
 pub struct Server {
@@ -376,7 +363,10 @@ fn get_authorized_clients(file: PathBuf) -> Result<Vec<Cid>, Error> {
     if json.len() == 0 {
         return Err(Error::new(
             NotFound,
-            format!("client config is empty: {}", file.as_os_str().to_str().unwrap()),
+            format!(
+                "client config is empty: {}",
+                file.as_os_str().to_str().unwrap()
+            ),
         ));
     }
 

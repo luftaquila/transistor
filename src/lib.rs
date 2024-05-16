@@ -1,9 +1,11 @@
 mod client;
+mod comm;
 mod display;
 mod server;
 mod utils;
 
 pub use client::*;
+pub use comm::*;
 pub use display::*;
 pub use server::*;
 pub use utils::*;
