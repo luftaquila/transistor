@@ -86,7 +86,7 @@ impl Server {
         let disp_ids = self.disp_ids.clone();
 
         /* spawn tcp handler thread */
-        thread::spawn(move || {
+        let thread = thread::spawn(move || {
             handle_client(current, clients, displays, disp_ids, authorized, tx1, rx1);
         });
 
@@ -203,6 +203,10 @@ impl Server {
 
         if let Err(e) = hook {
             eprintln!("[ERR] event hook failed: {}", e);
+        }
+
+        if let Err(e) = thread.join() {
+            eprintln!("[ERR] transceiver thread panicked: {:?}", e);
         }
     }
 }
