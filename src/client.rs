@@ -8,6 +8,7 @@ use bincode::deserialize;
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 
+use crate::comm::*;
 use crate::display::*;
 use crate::*;
 
@@ -104,7 +105,17 @@ impl Client {
 
         println!("[INF] connected!");
 
-        Ok(())
+        loop {
+            if let Err(e) = tcp_read(&mut self.tcp, &mut buffer) {
+                return Err(Error::new(
+                    UnexpectedEof,
+                    format!("warp in failed: {:?}", e),
+                ));
+            };
+
+            let msg: Message = deserialize(&buffer).unwrap();
+            println!("[DBG] msg: {:?}", msg);
+        }
     }
 
     fn set_display_position(&mut self, server_conf: Vec<Display>) {

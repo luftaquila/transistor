@@ -334,25 +334,34 @@ fn transceive(
         // check if there is something to transmit
         match rx.try_recv() {
             Ok(msg) => {
-                println!("msg: {:?}", msg);
-                // TODO: transmit
+                println!("[DBG] msg: {:?}", msg);
+
+                if let Err(e) = tcp_write(&mut cur.tcp, msg) {
+                    eprintln!("[ERR] msg transfer failed: {}", e);
+                    continue;
+                }
+
+                loop {
+                    // check if cursor warped back
+                    if let Err(e) = tcp_read(&mut cur.tcp, &mut buffer) {
+                        if e.kind() == WouldBlock {
+                            continue;
+                        }
+
+                        // TODO: proper error handling
+                        println!("[DBG] tcperr: {:?}", e);
+
+                        break;
+                    }
+
+                    println!("[DBG] cursor warped back!");
+                    break;
+                }
             }
-            Err(TryRecvError::Empty) => {
-                // do nothing
-            }
+            Err(TryRecvError::Empty) => {} // do nothing on empty recv
             Err(e) => {
                 eprintln!("[ERR] message receive failed: {}", e);
             }
-        }
-
-        // check if cursor warped back
-        if let Err(e) = tcp_read(&mut cur.tcp, &mut buffer) {
-            if e.kind() == WouldBlock {
-                continue;
-            }
-            println!("tcperr: {:?}", e);
-
-            continue;
         }
     }
 }

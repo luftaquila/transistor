@@ -22,7 +22,5 @@ fn main() -> Result<(), Error> {
     let mut client = Client::new(server, 1.0)?;
     client.start()?;
 
-    loop {}
-
     Ok(())
 }
